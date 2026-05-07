@@ -1,26 +1,172 @@
+@import url('https://fonts.googleapis.com/css?family=Montserrat:300,400,500,600,700,800&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Exact Legacy Values - LISAM SOLUTIONS HR / IT PRODIGY */
+  --primary: #03a9f3;
+  --secondary: #041731;
+  --background: #f6f7f9;
+  --foreground: #041731;
+  --border-color: #e4e7ea;
+  
+  /* Status Colors (Exact from custom-new.css) */
+  --status-success-bg: #edf9f7;
+  --status-success-text: #53af9a;
+  --status-info-bg: #eef6fe;
+  --status-info-text: #3594fa;
+  --status-danger-bg: #fcf2ed;
+  --status-danger-text: #e15931;
+  --status-warning-bg: #fff3d0;
+  --status-warning-text: #f9bc03;
+  --status-primary-bg: #faeefd;
+  --status-primary-text: #cf55e9;
+
+  --sidebar-text: #a6b0cf;
+  --sidebar-active-bg: #09203a;
 }
 
 @theme inline {
+  --font-montserrat: "Montserrat", sans-serif;
+  
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-text: var(--status-success-text);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-text: var(--status-info-text);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-danger-text: var(--status-danger-text);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-text: var(--status-warning-text);
+  --color-status-primary-bg: var(--status-primary-bg);
+  --color-status-primary-text: var(--status-primary-text);
+
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-active: var(--sidebar-active-bg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Base Styles (Exact Parity) */
+@layer base {
+  * {
+    @apply border-gray-600;
+    outline: none !important;
+  }
+
+  html {
+    @apply bg-[#f6f7f9];
+  }
+
+  body {
+    @apply font-montserrat antialiased text-[#041731] bg-[#f6f7f9];
+    font-size: 13px; /* Exact from custom-new.css */
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-light text-[#2b2b2b] uppercase;
+    margin: 10px 0;
+  }
+
+  h1 { font-size: 36px; line-height: 48px; }
+  h2 { font-size: 24px; line-height: 36px; }
+  h3 { font-size: 21px; line-height: 30px; }
+  h4 { font-size: 18px; line-height: 22px; font-weight: 400; }
+  h5 { font-size: 13px; font-weight: 700; }
+  h6 { font-size: 12px; font-weight: 800; }
+
+  a {
+    @apply transition-all duration-200;
+    text-decoration: none !important;
+  }
+
+  /* Exact Form Control Parity */
+  input:not([type]),
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="date"],
+  input[type="time"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  select,
+  textarea {
+    @apply border-[#e4e7ea80] bg-white transition-all w-full;
+    height: 30px; /* Exact from custom-new.css */
+    padding: 2px 10px; /* Exact from custom-new.css */
+    border-radius: 4px; /* Exact from rounded.css */
+    font-size: inherit;
+    color: #565656;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    @apply border-[#2b2b2b];
+    box-shadow: none !important;
+  }
+
+  /* Table Parity */
+  table {
+    @apply w-full border-t border-[#eeeeee5b] mb-[10px];
+  }
+
+  thead th {
+    @apply text-[#8d8d8d] uppercase px-2 py-2 border-b border-t border-[#f2f2f380] text-left;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  tbody td {
+    @apply px-2 py-2 border-t border-[#f2f2f35d] text-left;
+    font-size: 12px;
+    color: inherit;
+  }
+
+  tbody tr:hover {
+    @apply bg-white;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Component Parity */
+@layer components {
+  .white-box {
+    @apply bg-white p-[25px] mb-[13px];
+    border-radius: 8px; /* Exact from rounded.css */
+  }
+
+  .btn {
+    @apply inline-block text-center cursor-pointer px-[12px] py-[8px];
+    border-radius: 3px; /* Exact from rounded.css */
+    font-size: inherit;
+    transition: all 0.5s;
+  }
+
+  .btn-info { @apply bg-[#03a9f3] text-white border border-[#03a9f3]; }
+  .btn-success { @apply bg-[#00c292] text-white border border-[#00c292]; }
+  .btn-danger { @apply bg-[#fb9678] text-white border border-[#fb9678]; }
+  .btn-warning { @apply bg-[#fec107] text-white border border-[#fec107]; }
+  
+  .label {
+    @apply px-[12px] py-[4px] font-medium tracking-[.05em] inline-block;
+    border-radius: 60px;
+  }
+
+  /* Status Badges - Exact from custom-new.css */
+  .label-success { @apply bg-[#edf9f7] text-[#53af9a]; }
+  .label-info { @apply bg-[#eef6fe] text-[#3594fa]; }
+  .label-danger { @apply bg-[#fcf2ed] text-[#e15931]; }
+  .label-warning { @apply bg-[#fff3d0] text-[#f9bc03]; }
+  .label-primary { @apply bg-[#faeefd] text-[#cf55e9]; }
 }
+
+/* Custom Scrollbar (Legacy style) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track { background: #f1f1f1; }
+::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }

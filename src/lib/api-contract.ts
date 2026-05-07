@@ -1,0 +1,158 @@
+export type ApiResource =
+  | "account-setup"
+  | "attendance"
+  | "billing"
+  | "clients"
+  | "companies"
+  | "contacts"
+  | "contracts"
+  | "credit-notes"
+  | "currencies"
+  | "departments"
+  | "designations"
+  | "discussions"
+  | "employees"
+  | "estimates"
+  | "events"
+  | "expenses"
+  | "holidays"
+  | "invoices"
+  | "leads"
+  | "leaves"
+  | "notices"
+  | "payments"
+  | "products"
+  | "projects"
+  | "proposals"
+  | "reports"
+  | "settings"
+  | "tasks"
+  | "tickets"
+  | "time-logs";
+
+export type ApiEnvelope<T> = {
+  success: boolean;
+  data: T;
+  message?: string;
+  meta?: {
+    current_page?: number;
+    last_page?: number;
+    per_page?: number;
+    total?: number;
+  };
+};
+
+export type ApiListQuery = {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  status?: string;
+  include?: string | string[];
+  sort?: string;
+  direction?: "asc" | "desc";
+  [key: string]: string | number | boolean | string[] | undefined;
+};
+
+const singularResourceMap: Record<string, string> = {
+  client: "clients",
+  "client-category": "client-categories",
+  contact: "contacts",
+  contract: "contracts",
+  "contract-type": "contract-types",
+  currency: "currencies",
+  department: "departments",
+  designation: "designations",
+  discussion: "discussions",
+  "discussion-category": "discussion-categories",
+  employee: "employees",
+  "employee-faq": "employee-faqs",
+  "employee-faq-category": "employee-faq-categories",
+  estimate: "estimates",
+  event: "events",
+  expense: "expenses",
+  invoice: "invoices",
+  lead: "leads",
+  "lead-category": "lead-categories",
+  "lead-source": "lead-sources",
+  "lead-status": "lead-statuses",
+  leave: "leaves",
+  "leave-type": "leave-types",
+  leaveType: "leave-types",
+  notice: "notices",
+  payment: "payments",
+  product: "products",
+  project: "projects",
+  "project-category": "project-categories",
+  proposal: "proposals",
+  task: "tasks",
+  "task-category": "task-categories",
+  "task-label": "task-labels",
+  "task-request": "task-requests",
+  team: "teams",
+  ticket: "tickets",
+  "time-log": "time-logs",
+};
+
+const nestedRouteMap: Record<string, string> = {
+  "billing/packages": "billing/packages",
+  "billing/data": "billing/summary",
+  "billing/select-package": "billing/package-selections",
+  "billing/offline-payment-submit": "billing/offline-payments",
+  "salary-components": "payroll/salary-components",
+  "salary-groups": "payroll/salary-groups",
+};
+
+const stripSlashes = (value: string) => value.replace(/^\/+|\/+$/g, "");
+
+const splitUrl = (url: string) => {
+  const [pathPart = "", queryPart] = url.split("?");
+  return {
+    path: stripSlashes(pathPart),
+    query: queryPart ? `?${queryPart}` : "",
+  };
+};
+
+export const normalizeApiPath = (inputUrl?: string) => {
+  if (!inputUrl) return inputUrl;
+  if (/^https?:\/\//i.test(inputUrl)) return inputUrl;
+
+  const { path, query } = splitUrl(inputUrl);
+  if (!path) return inputUrl;
+  if (path.startsWith("v1/")) return `/${path}${query}`;
+
+  const parts = path.split("/");
+  const first = parts[0];
+  const nestedKey = parts.length > 1 ? `${first}/${parts[1]}` : first;
+
+  if (nestedRouteMap[nestedKey]) {
+    const remaining = parts.slice(2);
+    return `/v1/${[nestedRouteMap[nestedKey], ...remaining].join("/")}${query}`;
+  }
+
+  const resource = singularResourceMap[first] || first;
+  return `/v1/${[resource, ...parts.slice(1)].join("/")}${query}`;
+};
+
+export const apiRoutes = {
+  resource: (resource: ApiResource) => `/v1/${resource}`,
+  detail: (resource: ApiResource, id: number | string) => `/v1/${resource}/${id}`,
+  action: (resource: ApiResource, id: number | string, action: string) => `/v1/${resource}/${id}/${stripSlashes(action)}`,
+  collectionAction: (resource: ApiResource, action: string) => `/v1/${resource}/${stripSlashes(action)}`,
+  settings: (group: string) => `/v1/settings/${stripSlashes(group)}`,
+};
+
+export const buildQueryString = (query: ApiListQuery = {}) => {
+  const params = new URLSearchParams();
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value === undefined || value === "") return;
+    if (Array.isArray(value)) {
+      params.set(key, value.join(","));
+      return;
+    }
+    params.set(key, String(value));
+  });
+
+  const queryString = params.toString();
+  return queryString ? `?${queryString}` : "";
+};
