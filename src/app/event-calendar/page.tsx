@@ -18,7 +18,7 @@ export default function EventCalendarPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between bg-white px-6 py-4 shadow-sm -mx-6 -mt-6 mb-6 gap-3 border-b border-gray-50">
+        <div className="flex flex-wrap items-center justify-between bg-white px-6 py-4 shadow-sm -mx-6 -mt-6 mb-6 gap-3 border-b border-gray-500">
           <div>
              <h1 className="text-base font-black text-gray-800 uppercase tracking-widest">Event Calendar</h1>
              <p className="text-[10px] text-gray-400 font-bold mt-0.5">Manage company events and scheduled meetings</p>
@@ -31,7 +31,7 @@ export default function EventCalendarPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
            {/* Sidebar Events */}
            <div className="space-y-6">
-              <Card title="Upcoming Events" className="border-none shadow-sm bg-white p-6">
+              <Card title="Upcoming Events" className="border-gray-500 shadow-sm bg-white p-6">
                  <div className="space-y-4 mt-2">
                     {events.map((event) => (
                        <div key={event.id} className="flex items-start space-x-3 p-3 rounded-xl bg-gray-50/50 hover:bg-gray-50 transition-colors cursor-pointer border border-transparent hover:border-gray-100">
@@ -80,8 +80,8 @@ export default function EventCalendarPage() {
                        const hasEvent = events.find(e => parseInt(e.date.split('-')[2]) === day);
                        
                        return (
-                          <div key={i} className="min-h-[100px] p-2 border-r border-b border-gray-50 hover:bg-gray-50/30 transition-colors cursor-pointer relative group">
-                             <span className={`inline-block h-6 w-6 text-center leading-6 rounded-lg text-[10px] font-black ${
+                          <div key={i} className="min-h-[100px] p-2 border-r border-b border-l border-t border-gray-500 hover:bg-gray-50/30 transition-colors cursor-pointer relative group">
+                             <span className={`inline-block h-6 w-6 text-center leading-6 rounded-lg text-[16px] font-black ${
                                 isToday ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-gray-400 group-hover:text-gray-700"
                              }`}>
                                 {day > 0 && day <= 31 ? day : ""}

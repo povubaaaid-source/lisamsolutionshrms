@@ -82,7 +82,7 @@
     text-decoration: none !important;
   }
 
-  /* Exact Form Control Parity */
+  /* Form Controls */
   input:not([type]),
   input[type="text"],
   input[type="email"],
@@ -95,16 +95,137 @@
   input[type="search"],
   select,
   textarea {
-    @apply border-[#e4e7ea80] bg-white transition-all w-full;
-    height: 30px; /* Exact from custom-new.css */
-    padding: 2px 10px; /* Exact from custom-new.css */
-    border-radius: 4px; /* Exact from rounded.css */
-    font-size: inherit;
-    color: #565656;
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    /* border: 1px solid #d7dde5 !important; */
+    border-radius: 8px;
+    /* background-color: #ffffff; */
+    color: #263238;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    box-shadow: 0 1px 1px rgba(4, 23, 49, 0.03);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
   }
 
-  input:focus, select:focus, textarea:focus {
-    @apply border-[#2b2b2b];
+  select {
+    padding-right: 36px;
+  }
+
+  textarea {
+    min-height: 96px;
+    resize: vertical;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #9aa7b5;
+    opacity: 1;
+  }
+
+  input:hover,
+  select:hover,
+  textarea:hover {
+    border-color: #b8c2cc !important;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px rgba(3, 169, 243, 0.14) !important;
+    background-color: #ffffff;
+  }
+
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    background-color: #f3f5f7;
+    color: #98a4b0;
+    cursor: not-allowed;
+  }
+
+  input[aria-invalid="true"],
+  select[aria-invalid="true"],
+  textarea[aria-invalid="true"],
+  input.is-invalid,
+  select.is-invalid,
+  textarea.is-invalid {
+    border-color: #e15931 !important;
+    box-shadow: 0 0 0 3px rgba(225, 89, 49, 0.12) !important;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 16px;
+    min-height: 16px;
+    height: 16px;
+    padding: 0;
+    border-radius: 4px;
+    box-shadow: none;
+  }
+
+  .login-glass-field {
+    --login-field-bg: rgba(255, 255, 255, 0.72);
+    min-height: 36px;
+    overflow: hidden;
+    background: var(--login-field-bg) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.62),
+      0 10px 28px rgba(0, 77, 170, 0.08);
+  }
+
+  .login-glass-field:focus-within {
+    background: var(--login-field-bg) !important;
+  }
+
+  .login-glass-input {
+    width: 100% !important;
+    min-height: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    outline: none !important;
+    caret-color: #0f172a;
+    color-scheme: light;
+  }
+
+  .login-glass-input:hover,
+  .login-glass-input:focus {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .login-glass-input::placeholder {
+    color: rgba(71, 85, 105, 0.58) !important;
+  }
+
+  .login-glass-input:-webkit-autofill,
+  .login-glass-input:-webkit-autofill:hover,
+  .login-glass-input:-webkit-autofill:focus,
+  .login-glass-input:-webkit-autofill:active {
+    border: 0 !important;
+    -webkit-text-fill-color: #0f172a !important;
+    caret-color: #0f172a !important;
+    box-shadow: 0 0 0 1000px #f6fbff inset !important;
+    transition: background-color 9999s ease-in-out 0s;
+    background: #f6fbff !important;
+  }
+
+  .login-glass-checkbox {
+    width: 16px !important;
+    min-height: 16px !important;
+    height: 16px !important;
+    padding: 0 !important;
+    border: 1px solid rgba(15, 23, 42, 0.18) !important;
+    border-radius: 4px !important;
+    background: rgba(255, 255, 255, 0.78) !important;
     box-shadow: none !important;
   }
 
@@ -148,6 +269,29 @@
   .btn-success { @apply bg-[#00c292] text-white border border-[#00c292]; }
   .btn-danger { @apply bg-[#fb9678] text-white border border-[#fb9678]; }
   .btn-warning { @apply bg-[#fec107] text-white border border-[#fec107]; }
+
+  .form-control {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid #263238 !important;
+    border-radius: 8px;
+    color: #263238;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    box-shadow: 0 1px 1px rgba(4, 23, 49, 0.03);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  }
+
+  .form-control:hover {
+    border-color: #b8c2cc !important;
+  }
+
+  .form-control:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px rgba(3, 169, 243, 0.14) !important;
+  }
   
   .label {
     @apply px-[12px] py-[4px] font-medium tracking-[.05em] inline-block;
@@ -167,6 +311,6 @@
   width: 6px;
   height: 6px;
 }
-::-webkit-scrollbar-track { background: #f1f1f1; }
-::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+::-webkit-scrollbar-track { background: #041731; }
+::-webkit-scrollbar-thumb { background: #88888865; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #555; }

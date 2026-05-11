@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 interface ModalProps {
   isOpen: boolean;
@@ -13,18 +13,56 @@ interface ModalProps {
 
 export default function Modal({ isOpen, onClose, title, children, size = "md" }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
+    const handleFocusTrap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !modalRef.current) return;
+
+      const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
     if (isOpen) {
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       document.body.style.overflow = "hidden";
       window.addEventListener("keydown", handleEscape);
+      window.addEventListener("keydown", handleFocusTrap);
+
+      window.setTimeout(() => {
+        const firstFocusable = modalRef.current?.querySelector<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        firstFocusable?.focus();
+      }, 0);
+
+      return () => {
+        document.body.style.overflow = "auto";
+        window.removeEventListener("keydown", handleEscape);
+        window.removeEventListener("keydown", handleFocusTrap);
+        activeElement?.focus();
+      };
     }
     return () => {
       document.body.style.overflow = "auto";
       window.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("keydown", handleFocusTrap);
     };
   }, [isOpen, onClose]);
 
@@ -48,14 +86,19 @@ export default function Modal({ isOpen, onClose, title, children, size = "md" }:
       {/* Modal Content */}
       <div 
         ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={`relative w-full ${sizeClasses[size]} rounded-2xl bg-white shadow-2xl transition-all animate-in zoom-in-95 duration-300 overflow-hidden flex flex-col max-h-[90vh]`}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-6 py-4">
-          <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">{title}</h3>
+          <h3 id={titleId} className="text-sm font-black text-gray-800 uppercase tracking-widest">{title}</h3>
           <button 
+            type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            className="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:ring-2 focus-visible:ring-primary/30"
+            aria-label={`Close ${title}`}
           >
             <X className="h-4 w-4" />
           </button>

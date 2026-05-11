@@ -1,23 +1,34 @@
-import React from "react";
+import React, { useId } from "react";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  hint?: string;
 }
 
-export default function Input({ label, error, className = "", ...props }: InputProps) {
+export default function Input({ label, error, hint, className = "", id, ...props }: InputProps) {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  const errorId = `${inputId}-error`;
+  const hintId = `${inputId}-hint`;
+  const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ") || undefined;
+
   return (
-    <div className="w-full space-y-1">
+    <div className="w-full space-y-1.5">
       {label && (
-        <label className="text-sm font-medium text-gray-700">
+        <label htmlFor={inputId} className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
           {label}
         </label>
       )}
       <input
-        className={`w-full border-b border-gray-400 bg-transparent py-2 transition-all focus:border-primary focus:outline-none ${error ? "border-red-500" : ""} ${className}`}
+        id={inputId}
+        aria-invalid={error ? "true" : undefined}
+        aria-describedby={describedBy}
+        className={`form-control ${error ? "is-invalid" : ""} ${className}`}
         {...props}
       />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {hint && !error && <p id={hintId} className="text-[11px] font-medium text-gray-400">{hint}</p>}
+      {error && <p id={errorId} className="text-[11px] font-bold text-red-500">{error}</p>}
     </div>
   );
 }

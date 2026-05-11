@@ -3,11 +3,12 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { ArrowLeft, Save, RefreshCw, FileText, Plus, Trash2, DollarSign, Calendar as CalendarIcon } from "lucide-react";
+import { ArrowLeft, Save, RefreshCw, Plus, Trash2, DollarSign, Calendar as CalendarIcon } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
 
 interface EstimateItem {
   item_name: string;
@@ -16,16 +17,31 @@ interface EstimateItem {
   amount: number;
 }
 
+type OptionRecord = {
+  id: number | string;
+  name?: string;
+  currency_symbol?: string;
+  currency_code?: string;
+};
+
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string; error?: string } } }).response;
+    return response?.data?.message || response?.data?.error || fallback;
+  }
+  return fallback;
+};
+
 export default function CreateEstimatePage() {
   const router = useRouter();
-  const [clients, setClients] = useState<any[]>([]);
-  const [currencies, setCurrencies] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [clients, setClients] = useState<OptionRecord[]>([]);
+  const [currencies, setCurrencies] = useState<OptionRecord[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const today = new Date().toISOString().split("T")[0];
-  const validTill = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+  const validTill = "2026-06-07";
 
   const [formData, setFormData] = useState({
     client_id: "",
@@ -48,14 +64,15 @@ export default function CreateEstimatePage() {
         ]);
         setClients(clientRes.data.data || []);
         setCurrencies(currRes.data.data || []);
-      } catch {
-        setClients([{ id: 1, name: "Acme Corp" }]);
-        setCurrencies([{ id: 1, currency_symbol: "$", currency_code: "USD" }]);
+      } catch (err) {
+        console.error("Fetch Estimate Options Error:", err);
+        showToast("Failed to load estimate options", "error");
       } finally {
         setLoadingOptions(false);
       }
     };
     fetchOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -64,7 +81,10 @@ export default function CreateEstimatePage() {
 
   const handleItemChange = (index: number, field: keyof EstimateItem, value: string) => {
     const updated = [...items];
-    (updated[index] as any)[field] = field === "item_name" ? value : parseFloat(value) || 0;
+    updated[index] = {
+      ...updated[index],
+      [field]: field === "item_name" ? value : parseFloat(value) || 0,
+    };
     updated[index].amount = updated[index].quantity * updated[index].unit_price;
     setItems(updated);
   };
@@ -82,7 +102,7 @@ export default function CreateEstimatePage() {
     setError("");
 
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         client_id: formData.client_id,
         currency_id: formData.currency_id,
         valid_till: formData.valid_till,
@@ -98,16 +118,12 @@ export default function CreateEstimatePage() {
         })),
       };
 
-      if (localStorage.getItem("token") === "mock_token_12345") {
-        setTimeout(() => { router.push("/estimates"); router.refresh(); }, 800);
-        return;
-      }
-
       await api.post("/estimate", payload);
+      showToast("Estimate created successfully", "success");
       router.push("/estimates");
       router.refresh();
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.response?.data?.error || "Failed to create estimate.");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to create estimate."));
     } finally {
       setSaving(false);
     }
@@ -155,7 +171,7 @@ export default function CreateEstimatePage() {
                 <select name="client_id" value={formData.client_id} onChange={handleChange}
                   className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none appearance-none cursor-pointer" required>
                   <option value="">Select Client</option>
-                  {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -163,7 +179,7 @@ export default function CreateEstimatePage() {
                 <select name="currency_id" value={formData.currency_id} onChange={handleChange}
                   className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none appearance-none cursor-pointer" required>
                   <option value="">Select Currency</option>
-                  {currencies.map((c: any) => <option key={c.id} value={c.id}>{c.currency_symbol} {c.currency_code}</option>)}
+                  {currencies.map((c) => <option key={c.id} value={c.id}>{c.currency_symbol} {c.currency_code}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">

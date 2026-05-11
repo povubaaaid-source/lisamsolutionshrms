@@ -2,12 +2,15 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, Filter, RefreshCw, Edit, Trash2, Eye, CheckCircle2, Circle, AlertTriangle, Save } from "lucide-react";
+import { Plus, RefreshCw, Edit, Trash2, Eye, CheckCircle2, Circle, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+import { getStoredRole } from "@/lib/session";
+import type { Task } from "@/types";
 
 const priorityColors: Record<string, string> = {
   "urgent": "bg-red-100 text-red-600",
@@ -19,12 +22,16 @@ const priorityColors: Record<string, string> = {
 const memberColors = ["bg-blue-400", "bg-green-400", "bg-yellow-400", "bg-purple-400", "bg-red-400", "bg-pink-400", "bg-indigo-400"];
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
-  const [viewingTask, setViewingTask] = useState<any>(null);
-  const [deletingTaskId, setDeletingTaskId] = useState<number | null>(null);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<number | string | null>(null);
+  const [userRole] = useState(() => getStoredRole());
+  const canManageTasks = userRole === "admin" || userRole === "employee";
+  const canCreateTasks = userRole === "admin" || userRole === "employee";
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -33,13 +40,16 @@ export default function TasksPage() {
       setTasks(response.data.data);
     } catch (err) {
       console.error("Fetch Tasks Error:", err);
+      showToast("Failed to fetch tasks", "error");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredTasks = tasks.filter(t => {
@@ -48,14 +58,20 @@ export default function TasksPage() {
     return statusMatch && priorityMatch;
   });
 
-  const handleToggleStatus = async (id: number, currentStatus: string) => {
+  const handleToggleStatus = async (id: number | string, currentStatus: string) => {
+    if (!canManageTasks) {
+      showToast("You can view tasks but cannot update their status.", "info");
+      return;
+    }
+
     const newStatus = currentStatus === "completed" ? "incomplete" : "completed";
     try {
       await api.patch(`/task/${id}`, { status: newStatus });
       setTasks(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
+      showToast("Task status updated", "success");
     } catch (err) {
       console.error("Update Task Status Error:", err);
-      alert("Failed to update task status");
+      showToast("Failed to update task status", "error");
     }
   };
 
@@ -65,9 +81,10 @@ export default function TasksPage() {
         await api.delete(`/task/${deletingTaskId}`);
         setTasks(prev => prev.filter(t => t.id !== deletingTaskId));
         setDeletingTaskId(null);
+        showToast("Task deleted successfully", "success");
       } catch (err) {
         console.error("Delete Task Error:", err);
-        alert("Failed to delete task");
+        showToast("Failed to delete task", "error");
       }
     }
   };
@@ -92,9 +109,11 @@ export default function TasksPage() {
             </button>
             <Link href="/taskboard" className="rounded border border-blue-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-blue-500 hover:bg-blue-500 hover:text-white transition-colors">Task Board</Link>
             <Link href="/task-calendar" className="rounded border border-gray-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:bg-gray-500 hover:text-white transition-colors">Task Calendar</Link>
-            <Link href="/tasks/create" className="flex items-center space-x-1 rounded border border-green-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-green-600 hover:bg-green-500 hover:text-white transition-colors">
-              <span>Add Task</span><Plus className="h-3.5 w-3.5" />
-            </Link>
+            {canCreateTasks && (
+              <Link href="/tasks/create" className="flex items-center space-x-1 rounded border border-green-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-green-600 hover:bg-green-500 hover:text-white transition-colors">
+                <span>Add Task</span><Plus className="h-3.5 w-3.5" />
+              </Link>
+            )}
           </div>
         </div>
 
@@ -187,7 +206,7 @@ export default function TasksPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex -space-x-2">
-                        {task.users?.map((u: any, i: number) => (
+                        {task.users?.map((u, i) => (
                           <div key={i} className={`h-7 w-7 rounded-full border-2 border-white ${memberColors[i % memberColors.length]} flex items-center justify-center text-white text-[9px] font-black`} title={u.name}>
                             {u.name.split(' ').map((n: string) => n[0]).join('')}
                           </div>
@@ -203,8 +222,12 @@ export default function TasksPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center space-x-1 opacity-40 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => setViewingTask(task)} className="p-1.5 text-gray-400 hover:text-primary transition-colors" title="View"><Eye className="h-4 w-4" /></button>
-                        <Link href={`/tasks/${task.id}/edit`} className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors" title="Edit"><Edit className="h-4 w-4" /></Link>
-                        <button onClick={() => setDeletingTaskId(task.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                        {canManageTasks && (
+                          <>
+                            <Link href={`/tasks/${task.id}/edit`} className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors" title="Edit"><Edit className="h-4 w-4" /></Link>
+                            <button onClick={() => setDeletingTaskId(task.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -257,7 +280,7 @@ export default function TasksPage() {
                   <div>
                     <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Assigned To</h4>
                     <div className="flex -space-x-2 mt-2">
-                        {viewingTask.users?.map((u: any, i: number) => (
+                        {viewingTask.users?.map((u, i) => (
                           <div key={i} className={`h-8 w-8 rounded-full border-2 border-white ${memberColors[i % memberColors.length]} flex items-center justify-center text-white text-[10px] font-black`} title={u.name}>
                             {u.name.split(' ').map((n: string) => n[0]).join('')}
                           </div>

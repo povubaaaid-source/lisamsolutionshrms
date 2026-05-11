@@ -8,12 +8,30 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+
+type OptionRecord = {
+  id: number | string;
+  name?: string;
+  project_name?: string;
+  currency_symbol?: string;
+  currency_code?: string;
+};
+
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string; error?: string } } }).response;
+    return response?.data?.message || response?.data?.error || fallback;
+  }
+  return fallback;
+};
 
 export default function CreateExpensePage() {
   const router = useRouter();
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [currencies, setCurrencies] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [employees, setEmployees] = useState<OptionRecord[]>([]);
+  const [projects, setProjects] = useState<OptionRecord[]>([]);
+  const [currencies, setCurrencies] = useState<OptionRecord[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -40,15 +58,14 @@ export default function CreateExpensePage() {
         setProjects(projRes.data.data || []);
         setCurrencies(currRes.data.data || []);
       } catch (err) {
-        console.error("Failed to fetch expense options, using mock fallback:", err);
-        setEmployees([{ id: 1, name: "Alice Smith" }]);
-        setProjects([{ id: 1, project_name: "Website Redesign" }]);
-        setCurrencies([{ id: 1, currency_symbol: "$" }]);
+        console.error("Failed to fetch expense options:", err);
+        showToast("Failed to load expense options", "error");
       } finally {
         setLoadingOptions(false);
       }
     };
     fetchOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -61,7 +78,7 @@ export default function CreateExpensePage() {
     setError("");
 
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         user: { id: formData.user_id },
         currency: { id: formData.currency_id },
         item_name: formData.item_name,
@@ -74,21 +91,13 @@ export default function CreateExpensePage() {
         payload.project = { id: formData.project_id };
       }
 
-      // Mock testing bypass
-      if (localStorage.getItem("token") === "mock_token_12345") {
-        setTimeout(() => {
-          router.push("/expenses");
-          router.refresh();
-        }, 800);
-        return;
-      }
-
       await api.post("/expense", payload);
+      showToast("Expense created successfully", "success");
       router.push("/expenses");
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Create Expense Error:", err);
-      setError(err.response?.data?.message || err.response?.data?.error || "Failed to create expense.");
+      setError(getApiErrorMessage(err, "Failed to create expense."));
     } finally {
       setSaving(false);
     }
@@ -160,7 +169,7 @@ export default function CreateExpensePage() {
                     required
                   >
                     <option value="">Select Employee</option>
-                    {employees.map((emp: any) => (
+                    {employees.map((emp) => (
                       <option key={emp.id} value={emp.id}>{emp.name}</option>
                     ))}
                   </select>
@@ -176,7 +185,7 @@ export default function CreateExpensePage() {
                   className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                 >
                   <option value="">Select Project (Optional)</option>
-                  {projects.map((proj: any) => (
+                  {projects.map((proj) => (
                     <option key={proj.id} value={proj.id}>{proj.project_name}</option>
                   ))}
                 </select>
@@ -192,7 +201,7 @@ export default function CreateExpensePage() {
                   required
                 >
                   <option value="">Select Currency</option>
-                  {currencies.map((curr: any) => (
+                  {currencies.map((curr) => (
                     <option key={curr.id} value={curr.id}>{curr.currency_symbol} - {curr.currency_code}</option>
                   ))}
                 </select>

@@ -8,10 +8,25 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+
+type UserOption = {
+  id: number | string;
+  name: string;
+};
+
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string; error?: string } } }).response;
+    return response?.data?.message || response?.data?.error || fallback;
+  }
+  return fallback;
+};
 
 export default function CreateTicketPage() {
   const router = useRouter();
-  const [users, setUsers] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -35,16 +50,14 @@ export default function CreateTicketPage() {
         const allUsers = [...(empRes.data.data || []), ...(clientRes.data.data || [])];
         setUsers(allUsers);
       } catch (err) {
-        console.error("Failed to fetch ticket options, using mock fallback:", err);
-        setUsers([
-          { id: 1, name: "Alice Smith (Mock Employee)" },
-          { id: 2, name: "Acme Corp (Mock Client)" }
-        ]);
+        console.error("Failed to fetch ticket options:", err);
+        showToast("Failed to load ticket requesters", "error");
       } finally {
         setLoadingOptions(false);
       }
     };
     fetchOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -57,7 +70,7 @@ export default function CreateTicketPage() {
     setError("");
 
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         subject: formData.subject,
         description: formData.description,
         priority: formData.priority,
@@ -68,21 +81,13 @@ export default function CreateTicketPage() {
         payload.requester = { id: formData.requester_id };
       }
 
-      // Mock testing bypass
-      if (localStorage.getItem("token") === "mock_token_12345") {
-        setTimeout(() => {
-          router.push("/tickets");
-          router.refresh();
-        }, 800);
-        return;
-      }
-
       await api.post("/ticket", payload);
+      showToast("Ticket created successfully", "success");
       router.push("/tickets");
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Create Ticket Error:", err);
-      setError(err.response?.data?.message || err.response?.data?.error || "Failed to create ticket.");
+      setError(getApiErrorMessage(err, "Failed to create ticket."));
       setSaving(false);
     } 
   };
@@ -153,7 +158,7 @@ export default function CreateTicketPage() {
                     required
                   >
                     <option value="">Select Requester</option>
-                    {users.map((u: any) => (
+                    {users.map((u) => (
                       <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                   </select>

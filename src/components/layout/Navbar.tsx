@@ -1,24 +1,39 @@
 "use client";
 
-import { Bell, Search, Power, ChevronDown, User, LogIn, Clock, Timer, Menu, RefreshCw, Layers, Building2, Briefcase } from "lucide-react";
+import { Bell, Search, Power, ChevronDown, User, LogIn, Timer, Menu, RefreshCw, Briefcase } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
-import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
+import type { AuthUser } from "@/lib/auth-contract";
+import { useAuth } from "@/context/AuthContext";
 
-export default function Navbar() {
+type SearchItem = {
+  id: number | string;
+  name?: string;
+  project_name?: string;
+  status?: string;
+  client_detail?: { company_name?: string };
+  employee_detail?: { designation?: { name?: string } };
+};
+
+interface NavbarProps {
+  onMenuClick?: () => void;
+}
+
+export default function Navbar({ onMenuClick }: NavbarProps) {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const router = useRouter();
+  const { user, logout } = useAuth();
   
   // Search State
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<{
-    clients: any[];
-    employees: any[];
-    projects: any[];
+    clients: SearchItem[];
+    employees: SearchItem[];
+    projects: SearchItem[];
   }>({ clients: [], employees: [], projects: [] });
   const [showResults, setShowResults] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -48,16 +63,19 @@ export default function Navbar() {
           ]);
 
           const query = searchQuery.toLowerCase();
+          const clients = (clientsRes.data.data || []) as SearchItem[];
+          const employees = (employeesRes.data.data || []) as SearchItem[];
+          const projects = (projectsRes.data.data || []) as SearchItem[];
 
           setResults({
-            clients: (clientsRes.data.data || []).filter((c: any) => 
+            clients: clients.filter((c) => 
               c.name?.toLowerCase().includes(query) || 
               c.client_detail?.company_name?.toLowerCase().includes(query)
             ).slice(0, 3),
-            employees: (employeesRes.data.data || []).filter((e: any) => 
+            employees: employees.filter((e) => 
               e.name?.toLowerCase().includes(query)
             ).slice(0, 3),
-            projects: (projectsRes.data.data || []).filter((p: any) => 
+            projects: projects.filter((p) => 
               p.project_name?.toLowerCase().includes(query)
             ).slice(0, 3)
           });
@@ -75,12 +93,21 @@ export default function Navbar() {
   }, [searchQuery]);
 
   const hasResults = results.clients.length > 0 || results.employees.length > 0 || results.projects.length > 0;
+  const displayName = user?.name || "Admin";
+  const displayEmail = user?.email || "admin@company.com";
+  const displayRole = (user?.role || "admin").replace("_", " ");
 
   return (
     <header className="sticky top-0 z-40 flex h-[60px] w-full items-center justify-between bg-white px-6 text-gray-800 border-b border-[#f2f2f3]">
       {/* Left side: mobile toggle + search */}
       <div className="flex items-center space-x-6">
-        <button className="block text-gray-400 md:hidden hover:text-primary transition-colors">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          className="block rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/30 md:hidden"
+          aria-label="Open navigation menu"
+          aria-controls="mobile-sidebar"
+        >
            <Menu className="h-6 w-6" />
         </button>
         
@@ -126,7 +153,7 @@ export default function Navbar() {
                         className="flex items-center space-x-3 px-3 py-2.5 hover:bg-gray-50 rounded-xl transition-all group"
                       >
                         <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 font-bold text-xs uppercase group-hover:bg-blue-100">
-                          {client.client_detail?.company_name?.charAt(0) || client.name.charAt(0)}
+                          {client.client_detail?.company_name?.charAt(0) || client.name?.charAt(0) || "C"}
                         </div>
                         <div>
                           <p className="text-[11px] font-bold text-gray-700">{client.client_detail?.company_name || client.name}</p>
@@ -149,7 +176,7 @@ export default function Navbar() {
                         className="flex items-center space-x-3 px-3 py-2.5 hover:bg-gray-50 rounded-xl transition-all group"
                       >
                         <div className="h-8 w-8 rounded-lg bg-green-50 flex items-center justify-center text-green-500 font-bold text-xs uppercase group-hover:bg-green-100">
-                          {emp.name.charAt(0)}
+                          {emp.name?.charAt(0) || "E"}
                         </div>
                         <div>
                           <p className="text-[11px] font-bold text-gray-700">{emp.name}</p>
@@ -185,7 +212,7 @@ export default function Navbar() {
               </div>
               
               <div className="p-3 border-t border-gray-50 bg-gray-50/50">
-                <p className="text-[8px] text-center font-black text-gray-400 uppercase tracking-widest italic">Showing top results • Press enter for full search</p>
+                <p className="text-[8px] text-center font-black text-gray-400 uppercase tracking-widest italic">Showing top results</p>
               </div>
             </div>
           )}
@@ -224,7 +251,7 @@ export default function Navbar() {
                       <Bell className="h-4 w-4 text-blue-500" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-[11px] font-bold text-gray-700 leading-normal">A new task <span className="text-primary font-black">"Design System Update"</span> has been assigned to you.</p>
+                      <p className="text-[11px] font-bold text-gray-700 leading-normal">A new task <span className="text-primary font-black">&quot;Design System Update&quot;</span> has been assigned to you.</p>
                       <p className="text-[9px] text-gray-400 font-black uppercase mt-1 tracking-wider">2 Minutes ago</p>
                     </div>
                   </div>
@@ -247,8 +274,8 @@ export default function Navbar() {
                <User className="h-4 w-4 text-primary" />
             </div>
             <div className="hidden text-left md:block">
-               <p className="text-xs font-black text-gray-800 leading-tight">Admin</p>
-               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Administrator</p>
+               <p className="text-xs font-black text-gray-800 leading-tight">{displayName}</p>
+               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest capitalize">{displayRole}</p>
             </div>
             <ChevronDown className={`h-3 w-3 text-gray-400 transition-transform duration-200 ${showUserDropdown ? "rotate-180" : ""}`} />
           </button>
@@ -256,24 +283,26 @@ export default function Navbar() {
           {showUserDropdown && (
             <div className="absolute right-0 top-12 z-50 w-56 bg-white text-gray-800 shadow-lg border border-[#f2f2f3]">
               <div className="p-5 border-b border-gray-50 bg-gray-50/30 rounded-t-2xl">
-                <p className="text-xs font-black text-gray-800">Administrator</p>
-                <p className="text-[10px] text-gray-400 font-medium">admin@company.com</p>
+                <p className="text-xs font-black text-gray-800">{displayName}</p>
+                <p className="text-[10px] text-gray-400 font-medium">{displayEmail}</p>
               </div>
               <div className="p-2">
                 <Link href="/profile" className="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 hover:text-primary transition-all">
                   <User className="h-4 w-4" />
                   <span>My Profile</span>
                 </Link>
-                <Link href="/member/dashboard" className="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 hover:text-primary transition-all">
-                  <LogIn className="h-4 w-4" />
-                  <span>Login as Employee</span>
-                </Link>
+                {user?.role === "admin" && (
+                  <Link href="/member/dashboard" className="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 hover:text-primary transition-all">
+                    <LogIn className="h-4 w-4" />
+                    <span>Login as Employee</span>
+                  </Link>
+                )}
               </div>
               <div className="p-2 border-t border-gray-50">
-                <Link href="/login" className="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-black text-red-500 hover:bg-red-50 transition-all uppercase tracking-widest">
+                <button onClick={logout} className="flex w-full items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-black text-red-500 hover:bg-red-50 transition-all uppercase tracking-widest">
                   <Power className="h-4 w-4" />
                   <span>Sign Out</span>
-                </Link>
+                </button>
               </div>
             </div>
           )}
@@ -282,4 +311,3 @@ export default function Navbar() {
     </header>
   );
 }
-

@@ -2,12 +2,15 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, RefreshCw, Filter, Edit, Trash2, Eye, MoreVertical, FileText, DollarSign, AlertTriangle } from "lucide-react";
+import { Plus, RefreshCw, Edit, Trash2, Eye, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+import { getStoredRole } from "@/lib/session";
+import type { Project } from "@/types";
 
 const statusColors: Record<string, string> = {
   "in progress": "bg-blue-100 text-blue-600",
@@ -20,11 +23,14 @@ const statusColors: Record<string, string> = {
 const memberColors = ["bg-blue-400", "bg-green-400", "bg-yellow-400", "bg-purple-400", "bg-red-400", "bg-pink-400", "bg-indigo-400", "bg-orange-400"];
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("All");
   const [clientFilter, setClientFilter] = useState("All");
-  const [deletingProjectId, setDeletingProjectId] = useState<number | null>(null);
+  const [deletingProjectId, setDeletingProjectId] = useState<number | string | null>(null);
+  const [userRole] = useState(() => getStoredRole());
+  const canManageProjects = userRole === "admin";
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -33,13 +39,16 @@ export default function ProjectsPage() {
       setProjects(response.data.data);
     } catch (err) {
       console.error("Fetch Projects Error:", err);
+      showToast("Failed to fetch projects", "error");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredProjects = projects.filter(proj => {
@@ -54,9 +63,10 @@ export default function ProjectsPage() {
         await api.delete(`/project/${deletingProjectId}`);
         setProjects(prev => prev.filter(p => p.id !== deletingProjectId));
         setDeletingProjectId(null);
+        showToast("Project deleted successfully", "success");
       } catch (err) {
         console.error("Delete Project Error:", err);
-        alert("Failed to delete project");
+        showToast("Failed to delete project", "error");
       }
     }
   };
@@ -82,10 +92,12 @@ export default function ProjectsPage() {
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <Link href="/projects/create" className="flex items-center space-x-1 rounded border border-green-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-green-600 hover:bg-green-500 hover:text-white transition-colors">
-              <span>Add Project</span>
-              <Plus className="h-3.5 w-3.5" />
-            </Link>
+            {canManageProjects && (
+              <Link href="/projects/create" className="flex items-center space-x-1 rounded border border-green-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-green-600 hover:bg-green-500 hover:text-white transition-colors">
+                <span>Add Project</span>
+                <Plus className="h-3.5 w-3.5" />
+              </Link>
+            )}
           </div>
         </div>
 
@@ -115,7 +127,7 @@ export default function ProjectsPage() {
                 className="w-full rounded-lg border border-gray-100 px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20 outline-none transition-all appearance-none bg-white"
               >
                 <option>All</option>
-                {clients.map((client: any) => (
+                {clients.map((client) => (
                   <option key={client} value={client}>{client}</option>
                 ))}
               </select>
@@ -168,14 +180,14 @@ export default function ProjectsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex -space-x-2">
-                        {proj.members?.slice(0, 4).map((m: any, i: number) => (
+                        {proj.members?.slice(0, 4).map((m, i) => (
                           <div key={i} className={`h-7 w-7 rounded-full border-2 border-white ${memberColors[i % memberColors.length]} flex items-center justify-center text-white text-[9px] font-black`} title={m.name}>
                             {m.name.split(' ').map((n: string) => n[0]).join('')}
                           </div>
                         ))}
                         {(proj.members?.length || 0) > 4 && (
                           <div className="h-7 w-7 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-gray-500 text-[8px] font-black">
-                            +{proj.members.length - 4}
+                            +{(proj.members?.length || 0) - 4}
                           </div>
                         )}
                       </div>
@@ -196,8 +208,12 @@ export default function ProjectsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center space-x-1 opacity-40 group-hover:opacity-100 transition-opacity">
                         <Link href={`/projects/${proj.id}`} className="p-1.5 text-gray-400 hover:text-primary transition-colors" title="View"><Eye className="h-4 w-4" /></Link>
-                        <Link href={`/projects/${proj.id}/edit`} className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors" title="Edit"><Edit className="h-4 w-4" /></Link>
-                        <button onClick={() => setDeletingProjectId(proj.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                        {canManageProjects && (
+                          <>
+                            <Link href={`/projects/${proj.id}/edit`} className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors" title="Edit"><Edit className="h-4 w-4" /></Link>
+                            <button onClick={() => setDeletingProjectId(proj.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

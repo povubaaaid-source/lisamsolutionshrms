@@ -5,20 +5,12 @@ import Link from "next/link";
 import { 
   Plus, 
   RefreshCw, 
-  Filter, 
   Edit, 
   Trash2, 
   Eye, 
-  Download, 
   AlertTriangle,
   Users,
-  UserCheck,
-  Search,
-  ChevronDown,
-  Calendar,
-  Layers,
-  Award,
-  ShieldCheck
+  UserCheck
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
@@ -26,11 +18,27 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { getStoredRole } from "@/lib/session";
+import type { UserRole } from "@/lib/auth-contract";
+
+type EmployeeRecord = {
+  id: number | string;
+  name: string;
+  email?: string;
+  role?: string;
+  status?: string;
+  employee_detail?: {
+    designation?: { name?: string };
+    department?: { team_name?: string };
+    joining_date?: string;
+  };
+};
 
 export default function EmployeesPage() {
   const { showToast } = useToast();
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRole] = useState<UserRole>(() => getStoredRole());
   
   // Advanced Filters parity with Laravel
   const [statusFilter, setStatusFilter] = useState("all");
@@ -38,17 +46,16 @@ export default function EmployeesPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [designationFilter, setDesignationFilter] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
-  const [skillFilter, setSkillFilter] = useState<string[]>([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const [deletingEmployeeId, setDeletingEmployeeId] = useState<number | null>(null);
+  const [deletingEmployeeId, setDeletingEmployeeId] = useState<number | string | null>(null);
 
   const fetchEmployees = async () => {
     setLoading(true);
     try {
       const response = await api.get("/employee?include=employeeDetail,employeeDetail.designation,employeeDetail.department,role");
-      let empList = response.data.data || [];
+      let empList = (response.data.data || []) as EmployeeRecord[];
       
       // Mock fallback if API is empty
       if (empList.length === 0) {
@@ -69,6 +76,7 @@ export default function EmployeesPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchEmployees();
   }, []);
 
@@ -77,9 +85,11 @@ export default function EmployeesPage() {
     const deptMatch = deptFilter === "all" || emp.employee_detail?.department?.team_name === deptFilter;
     const desigMatch = designationFilter === "all" || emp.employee_detail?.designation?.name === designationFilter;
     const empMatch = employeeFilter === "all" || emp.id.toString() === employeeFilter;
+    const roleMatch = roleFilter === "all" || emp.role === roleFilter;
     // Add date range filter logic here if needed
-    return statusMatch && deptMatch && desigMatch && empMatch;
+    return statusMatch && deptMatch && desigMatch && empMatch && roleMatch;
   });
+  const canManageEmployees = userRole === "admin";
 
   const handleDelete = async () => {
     if (deletingEmployeeId) {
@@ -89,6 +99,7 @@ export default function EmployeesPage() {
         showToast("Employee deleted successfully", "success");
         setDeletingEmployeeId(null);
       } catch (err) {
+        console.error("Delete Employee Error:", err);
         showToast("Failed to delete employee", "error");
       }
     }
@@ -100,7 +111,6 @@ export default function EmployeesPage() {
     setRoleFilter("all");
     setDesignationFilter("all");
     setEmployeeFilter("all");
-    setSkillFilter([]);
     setStartDate("");
     setEndDate("");
   };
@@ -129,11 +139,13 @@ export default function EmployeesPage() {
              <Button onClick={fetchEmployees} className="btn-default">
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Sync
              </Button>
-             <Link href="/employees/create">
-               <Button variant="primary">
-                  <Plus className="h-4 w-4 mr-2" /> Add Employee
-               </Button>
-             </Link>
+             {canManageEmployees && (
+               <Link href="/employees/create">
+                 <Button variant="primary">
+                    <Plus className="h-4 w-4 mr-2" /> Add Employee
+                 </Button>
+               </Link>
+             )}
           </div>
         </div>
 
@@ -314,8 +326,12 @@ export default function EmployeesPage() {
                     <td>
                       <div className="flex items-center justify-center space-x-2">
                         <Link href={`/employees/${emp.id}`} className="p-1 text-gray-400 hover:text-primary"><Eye className="h-4 w-4" /></Link>
-                        <Link href={`/employees/${emp.id}/edit`} className="p-1 text-gray-400 hover:text-blue-500"><Edit className="h-4 w-4" /></Link>
-                        <button onClick={() => setDeletingEmployeeId(emp.id)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+                        {canManageEmployees && (
+                          <>
+                            <Link href={`/employees/${emp.id}/edit`} className="p-1 text-gray-400 hover:text-blue-500"><Edit className="h-4 w-4" /></Link>
+                            <button onClick={() => setDeletingEmployeeId(emp.id)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

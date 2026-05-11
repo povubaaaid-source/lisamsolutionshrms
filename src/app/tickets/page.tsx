@@ -2,47 +2,97 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
 import { 
   Plus, 
   RefreshCw, 
   Ticket, 
-  Search, 
-  Filter, 
   Calendar,
-  User,
-  AlertCircle,
   MessageSquare,
-  CheckCircle2,
   Check,
   Trash2,
-  MoreVertical,
-  ChevronDown
+  AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+import { getStoredRole } from "@/lib/session";
+
+type TicketPerson = string | { id?: number | string; name?: string };
+
+type TicketRecord = {
+  id: number | string;
+  subject: string;
+  requester?: TicketPerson;
+  priority: "urgent" | "high" | "medium" | "low" | string;
+  status: "open" | "pending" | "resolved" | "closed" | string;
+  agent?: TicketPerson;
+  date?: string;
+  created_at?: string;
+};
+
+const getPersonName = (person: TicketPerson | undefined, fallback = "N/A") => {
+  if (!person) return fallback;
+  if (typeof person === "string") return person;
+  return person.name || fallback;
+};
+
+const getTicketDate = (ticket: TicketRecord) => ticket.date || ticket.created_at?.slice(0, 10) || "N/A";
 
 export default function TicketsPage() {
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [tickets, setTickets] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<TicketRecord[]>([]);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [deletingTicketId, setDeletingTicketId] = useState<number | string | null>(null);
+  const [userRole] = useState(() => getStoredRole());
+  const canDeleteTickets = userRole === "admin";
 
   const fetchTickets = async () => {
     setLoading(true);
     try {
-      // Mock data for legacy parity
-      setTickets([
-        { id: 101, subject: "Server access issue", requester: "John Doe", priority: "urgent", status: "open", agent: "Admin", date: "2024-05-01" },
-        { id: 102, subject: "Login loop on mobile", requester: "Jane Smith", priority: "high", status: "pending", agent: "Super Admin", date: "2024-05-03" },
-        { id: 103, subject: "Reset password help", requester: "Robert Fox", priority: "medium", status: "resolved", agent: "Admin", date: "2024-05-05" },
-      ]);
+      const response = await api.get("/ticket");
+      setTickets(response.data.data || []);
+    } catch (err) {
+      console.error("Fetch Tickets Error:", err);
+      showToast("Failed to fetch tickets", "error");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const filteredTickets = tickets.filter((ticket) => {
+    const statusMatch = statusFilter === "all" || ticket.status === statusFilter;
+    const priorityMatch = priorityFilter === "all" || ticket.priority === priorityFilter;
+    return statusMatch && priorityMatch;
+  });
+
+  const handleDelete = async () => {
+    if (!deletingTicketId) return;
+
+    try {
+      await api.delete(`/ticket/${deletingTicketId}`);
+      setTickets((prev) => prev.filter((ticket) => ticket.id !== deletingTicketId));
+      setDeletingTicketId(null);
+      showToast("Ticket deleted successfully", "success");
+    } catch (err) {
+      console.error("Delete Ticket Error:", err);
+      showToast("Failed to delete ticket", "error");
+    }
+  };
+
+  const resetFilters = () => {
+    setStatusFilter("all");
+    setPriorityFilter("all");
+  };
 
   return (
     <DashboardLayout>
@@ -81,27 +131,27 @@ export default function TicketsPage() {
                 </div>
                 <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Status</label>
-                    <select className="form-control">
-                        <option>All</option>
-                        <option>Open</option>
-                        <option>Pending</option>
-                        <option>Resolved</option>
-                        <option>Closed</option>
+                    <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="form-control">
+                        <option value="all">All</option>
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
                     </select>
                 </div>
                 <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Priority</label>
-                    <select className="form-control">
-                        <option>All</option>
-                        <option>Urgent</option>
-                        <option>High</option>
-                        <option>Medium</option>
-                        <option>Low</option>
+                    <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="form-control">
+                        <option value="all">All</option>
+                        <option value="urgent">Urgent</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
                     </select>
                 </div>
                 <div className="flex space-x-2">
                     <Button className="btn-success btn-sm flex-1"><Check className="h-4 w-4 mr-1" /> Apply</Button>
-                    <Button className="btn-inverse btn-sm flex-1"><RefreshCw className="h-4 w-4 mr-1" /> Reset</Button>
+                    <Button onClick={resetFilters} className="btn-inverse btn-sm flex-1"><RefreshCw className="h-4 w-4 mr-1" /> Reset</Button>
                 </div>
             </div>
         </div>
@@ -122,19 +172,21 @@ export default function TicketsPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {tickets.map((ticket) => (
+                        {filteredTickets.map((ticket) => {
+                            const requesterName = getPersonName(ticket.requester);
+                            return (
                             <tr key={ticket.id}>
                                 <td className="text-center font-bold text-primary">#{ticket.id}</td>
                                 <td>
                                     <div className="font-bold text-[13px]">{ticket.subject}</div>
-                                    <div className="text-[10px] text-gray-400 font-medium">Created: {ticket.date}</div>
+                                    <div className="text-[10px] text-gray-400 font-medium">Created: {getTicketDate(ticket)}</div>
                                 </td>
                                 <td>
                                     <div className="flex items-center">
                                         <div className="h-6 w-6 bg-gray-100 rounded-full flex items-center justify-center mr-2 text-[10px] font-bold text-gray-500 border border-gray-200">
-                                            {ticket.requester.charAt(0)}
+                                            {requesterName.charAt(0)}
                                         </div>
-                                        <span className="font-medium">{ticket.requester}</span>
+                                        <span className="font-medium">{requesterName}</span>
                                     </div>
                                 </td>
                                 <td>
@@ -153,25 +205,59 @@ export default function TicketsPage() {
                                         {ticket.status}
                                     </span>
                                 </td>
-                                <td>{ticket.agent}</td>
+                                <td>{getPersonName(ticket.agent)}</td>
                                 <td className="text-right">
                                     <div className="flex justify-end space-x-1">
-                                        <button className="btn-info btn-outline p-1 rounded hover:bg-info hover:text-white transition-all">
+                                        <Link href={`/tickets/${ticket.id}`} className="btn-info btn-outline p-1 rounded hover:bg-info hover:text-white transition-all">
                                             <MessageSquare className="h-4 w-4" />
-                                        </button>
-                                        <button className="btn-danger btn-outline p-1 rounded hover:bg-danger hover:text-white transition-all">
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+                                        </Link>
+                                        {canDeleteTickets && (
+                                            <button onClick={() => setDeletingTicketId(ticket.id)} className="btn-danger btn-outline p-1 rounded hover:bg-danger hover:text-white transition-all">
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
-                        ))}
+                        )})}
+                        {!loading && filteredTickets.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="py-16 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                    No tickets found
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
+            {loading && (
+                <div className="p-8 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    Loading tickets...
+                </div>
+            )}
         </div>
 
       </div>
+
+      <Modal
+        isOpen={!!deletingTicketId}
+        onClose={() => setDeletingTicketId(null)}
+        title="Delete Ticket"
+        size="sm"
+      >
+        <div className="px-4 py-6 text-center">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded bg-red-50 text-red-500">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <p className="mb-8 text-xs font-bold leading-relaxed text-gray-500">
+            This removes the ticket from the shared frontend API store.
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => setDeletingTicketId(null)} className="btn-default flex-1">Cancel</Button>
+            <Button onClick={handleDelete} className="btn-danger flex-1">Delete</Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

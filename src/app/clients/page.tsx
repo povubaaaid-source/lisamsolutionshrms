@@ -2,7 +2,7 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, Filter, RefreshCw, Edit, Trash2, Eye, AlertTriangle } from "lucide-react";
+import { Plus, RefreshCw, Edit, Trash2, Eye, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -16,7 +16,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("All");
-  const [deletingClientId, setDeletingClientId] = useState<number | null>(null);
+  const [deletingClientId, setDeletingClientId] = useState<number | string | null>(null);
   const { showToast } = useToast();
 
   // Pagination states
@@ -43,7 +43,9 @@ export default function ClientsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchClients(currentPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
 
   const handleDelete = async () => {

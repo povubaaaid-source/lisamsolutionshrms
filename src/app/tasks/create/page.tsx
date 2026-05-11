@@ -13,6 +13,21 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/context/ToastContext";
 
+type OptionRecord = {
+  id: number | string;
+  name?: string;
+  project_name?: string;
+  category_name?: string;
+};
+
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+};
+
 const taskSchema = z.object({
   heading: z.string().min(2, "Task title must be at least 2 characters"),
   project_id: z.string().optional(),
@@ -31,9 +46,9 @@ type TaskFormValues = z.infer<typeof taskSchema>;
 export default function CreateTaskPage() {
   const router = useRouter();
   const { showToast } = useToast();
-  const [projects, setProjects] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [projects, setProjects] = useState<OptionRecord[]>([]);
+  const [employees, setEmployees] = useState<OptionRecord[]>([]);
+  const [categories, setCategories] = useState<OptionRecord[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -69,30 +84,20 @@ export default function CreateTaskPage() {
         setEmployees(empRes.data.data || []);
         setCategories(catRes.data.data || []);
       } catch (err) {
-        console.error("Failed to fetch task options, using mock fallback:", err);
-        setProjects([
-          { id: 1, project_name: "Website Redesign" },
-          { id: 2, project_name: "Mobile App Development" }
-        ]);
-        setEmployees([
-          { id: 1, name: "Alice Smith" },
-          { id: 2, name: "Bob Johnson" }
-        ]);
-        setCategories([
-          { id: 1, category_name: "Design" },
-          { id: 2, category_name: "Development" }
-        ]);
+        console.error("Failed to fetch task options:", err);
+        showToast("Failed to load task options", "error");
       } finally {
         setLoadingOptions(false);
       }
     };
     fetchOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onSubmit = async (data: TaskFormValues) => {
     setSaving(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         heading: data.heading,
         start_date: data.start_date,
         due_date: data.due_date,
@@ -115,9 +120,9 @@ export default function CreateTaskPage() {
       showToast("Task created successfully!");
       router.push("/tasks");
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Create Task Error:", err);
-      showToast(err.response?.data?.message || "Failed to create task.", "error");
+      showToast(getApiErrorMessage(err, "Failed to create task."), "error");
     } finally {
       setSaving(false);
     }
@@ -175,7 +180,7 @@ export default function CreateTaskPage() {
                   className="w-full border-gray-200 border rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                 >
                   <option value="">Select Project (Optional)</option>
-                  {projects.map((proj: any) => (
+                  {projects.map((proj) => (
                     <option key={proj.id} value={proj.id}>{proj.project_name}</option>
                   ))}
                 </select>
@@ -211,7 +216,7 @@ export default function CreateTaskPage() {
                   }`}
                 >
                   <option value="">Select Employee</option>
-                  {employees.map((emp: any) => (
+                  {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>{emp.name}</option>
                   ))}
                 </select>
@@ -225,7 +230,7 @@ export default function CreateTaskPage() {
                   className="w-full border-gray-200 border rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                 >
                   <option value="">--</option>
-                  {categories.map((cat: any) => (
+                  {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.category_name}</option>
                   ))}
                 </select>

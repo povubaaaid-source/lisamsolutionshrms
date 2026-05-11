@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 import NextTopLoader from "nextjs-toploader";
 import { ToastProvider } from "@/context/ToastContext";
+import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
-  title: "Worksuite - HR & Project Management",
+  title: "Lisamsolutions - HR & Project Management",
   description: "HR & Project Management Tool",
 };
 
@@ -18,7 +19,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <NextTopLoader color="#03a9f3" showSpinner={false} />
         <ToastProvider>
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>

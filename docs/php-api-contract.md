@@ -9,6 +9,7 @@ Set this in `.env.local`:
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api
 NEXT_PUBLIC_API_TIMEOUT_MS=5000
+NEXT_PUBLIC_API_MODE=mock
 ```
 
 The frontend calls versioned routes under:
@@ -16,6 +17,8 @@ The frontend calls versioned routes under:
 ```txt
 /api/v1
 ```
+
+Use `NEXT_PUBLIC_API_MODE=mock` while the frontend is being built without the PHP backend. The mock adapter returns the same `/v1/*` response envelope and persists browser data in `localStorage`. Switch to `NEXT_PUBLIC_API_MODE=live` when your plain PHP backend is ready.
 
 ## Response Envelope
 

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -11,7 +10,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/context/ToastContext";
-import { RefreshCw, Save, ArrowLeft, User, AlertCircle } from "lucide-react";
+import { RefreshCw, Save, ArrowLeft, AlertCircle } from "lucide-react";
 import { Client } from "@/types";
 
 const clientSchema = z.object({
@@ -25,6 +24,14 @@ const clientSchema = z.object({
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
+
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+};
 
 export default function EditClientPage() {
   const params = useParams();
@@ -57,9 +64,9 @@ export default function EditClientPage() {
           mobile: data.client_detail?.mobile || "",
           address: data.client_detail?.address || "",
         });
-      } catch (err: any) {
+      } catch (err) {
         console.error("Fetch Client Error:", err);
-        showToast("Failed to load client data.", "error");
+        showToast(getApiErrorMessage(err, "Failed to load client data."), "error");
       } finally {
         setLoading(false);
       }
@@ -70,7 +77,7 @@ export default function EditClientPage() {
   const onSubmit = async (data: ClientFormValues) => {
     setSaving(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         name: data.name,
         email: data.email,
         client_detail: {
@@ -89,9 +96,9 @@ export default function EditClientPage() {
       showToast("Client updated successfully!");
       router.push(`/clients/${params.id}`);
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Update Client Error:", err);
-      showToast(err.response?.data?.message || "Failed to update client.", "error");
+      showToast(getApiErrorMessage(err, "Failed to update client."), "error");
     } finally {
       setSaving(false);
     }

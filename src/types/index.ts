@@ -3,7 +3,7 @@ export interface User {
   id: number;
   name: string;
   email: string;
-  role: 'admin' | 'employee' | 'client';
+  role: 'super_admin' | 'admin' | 'employee' | 'client';
   image?: string;
 }
 
@@ -40,6 +40,7 @@ export interface Employee {
   id: number;
   name: string;
   email: string;
+  role?: 'admin' | 'employee';
   status: 'active' | 'deactive';
   image?: string;
   gender?: string;
@@ -49,12 +50,14 @@ export interface Employee {
     joining_date: string;
     department_id?: number | string;
     designation_id?: number | string;
+    shift_type_id?: number | string;
     mobile?: string;
     address?: string;
     hourly_rate?: number;
     slack_username?: string;
     designation?: { name: string };
     department?: { team_name: string };
+    shift_type?: { id?: number | string; shift_name?: string; code?: string };
     custom_fields?: unknown[];
   };
   tasks_count?: number;
@@ -67,12 +70,13 @@ export interface Employee {
 export interface Project {
   id: number;
   project_name: string;
-  project_summary: string;
-  start_date: string;
+  project_summary?: string;
+  start_date?: string;
   deadline: string;
   status: 'not started' | 'in progress' | 'on hold' | 'canceled' | 'finished';
   client?: Client;
   members?: Employee[];
+  total_earnings?: number;
 }
 
 // Task Types

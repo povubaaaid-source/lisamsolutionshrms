@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
 
 interface InvoiceItem {
   item_name: string;
@@ -16,19 +17,35 @@ interface InvoiceItem {
   amount: number;
 }
 
+type OptionRecord = {
+  id: number | string;
+  name?: string;
+  currency_symbol?: string;
+  currency_code?: string;
+};
+
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string; error?: string } } }).response;
+    return response?.data?.message || response?.data?.error || fallback;
+  }
+  return fallback;
+};
+
 export default function CreateInvoicePage() {
   const router = useRouter();
-  const [clients, setClients] = useState<any[]>([]);
-  const [currencies, setCurrencies] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [clients, setClients] = useState<OptionRecord[]>([]);
+  const [currencies, setCurrencies] = useState<OptionRecord[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const today = new Date().toISOString().split("T")[0];
-  const due = new Date(Date.now() + 15 * 86400000).toISOString().split("T")[0];
+  const today = "2026-05-08";
+  const due = "2026-05-23";
 
   const [formData, setFormData] = useState({
-    invoice_number: `INV-${Date.now().toString().slice(-6)}`,
+    invoice_number: "INV-DRAFT",
     client_id: "",
     currency_id: "",
     issue_date: today,
@@ -50,14 +67,15 @@ export default function CreateInvoicePage() {
         ]);
         setClients(clientRes.data.data || []);
         setCurrencies(currRes.data.data || []);
-      } catch {
-        setClients([{ id: 1, name: "Acme Corp" }]);
-        setCurrencies([{ id: 1, currency_symbol: "$", currency_code: "USD" }]);
+      } catch (err) {
+        console.error("Fetch Invoice Options Error:", err);
+        showToast("Failed to load invoice options", "error");
       } finally {
         setLoadingOptions(false);
       }
     };
     fetchOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -66,7 +84,10 @@ export default function CreateInvoicePage() {
 
   const handleItemChange = (index: number, field: keyof InvoiceItem, value: string) => {
     const updated = [...items];
-    (updated[index] as any)[field] = field === "item_name" ? value : parseFloat(value) || 0;
+    updated[index] = {
+      ...updated[index],
+      [field]: field === "item_name" ? value : parseFloat(value) || 0,
+    };
     updated[index].amount = updated[index].quantity * updated[index].unit_price;
     setItems(updated);
   };
@@ -84,7 +105,7 @@ export default function CreateInvoicePage() {
     setError("");
 
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         invoice_number: formData.invoice_number,
         client_id: formData.client_id,
         currency_id: formData.currency_id,
@@ -102,16 +123,12 @@ export default function CreateInvoicePage() {
         })),
       };
 
-      if (localStorage.getItem("token") === "mock_token_12345") {
-        setTimeout(() => { router.push("/invoices"); router.refresh(); }, 800);
-        return;
-      }
-
       await api.post("/invoice", payload);
+      showToast("Invoice created successfully", "success");
       router.push("/invoices");
       router.refresh();
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.response?.data?.error || "Failed to create invoice.");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to create invoice."));
     } finally {
       setSaving(false);
     }
@@ -168,7 +185,7 @@ export default function CreateInvoicePage() {
                 <select name="client_id" value={formData.client_id} onChange={handleChange}
                   className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none appearance-none cursor-pointer" required>
                   <option value="">Select Client</option>
-                  {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -176,7 +193,7 @@ export default function CreateInvoicePage() {
                 <select name="currency_id" value={formData.currency_id} onChange={handleChange}
                   className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none appearance-none cursor-pointer" required>
                   <option value="">Select Currency</option>
-                  {currencies.map((c: any) => <option key={c.id} value={c.id}>{c.currency_symbol} {c.currency_code}</option>)}
+                  {currencies.map((c) => <option key={c.id} value={c.id}>{c.currency_symbol} {c.currency_code}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">

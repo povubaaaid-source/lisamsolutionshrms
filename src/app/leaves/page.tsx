@@ -7,15 +7,9 @@ import {
   Calendar, 
   List, 
   Settings, 
-  Filter, 
   ChevronLeft, 
   ChevronRight,
-  User,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  MoreVertical,
-  Search
+  RefreshCw
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Button from "@/components/ui/Button";
@@ -23,32 +17,35 @@ import Card from "@/components/ui/Card";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 
+type LeaveRecord = {
+  id: number | string;
+  user?: { name?: string };
+  employee?: { name?: string };
+  date?: string;
+  leave_date?: string;
+  reason?: string;
+  status: string;
+  type?: string;
+  leave_type?: { type_name?: string };
+};
+
 export default function LeaveDashboardPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
-  // Dashboard parity with Laravel index.blade.php
-  const [pendingLeaves, setPendingLeaves] = useState<any[]>([]);
-  const [leaves, setLeaves] = useState<any[]>([]);
+  const [pendingLeaves, setPendingLeaves] = useState<LeaveRecord[]>([]);
+  const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Mock data for leaves/index.blade.php
-      const mockPending = [
-        { id: 1, user: { name: "Alice Smith" }, date: "2024-05-10", reason: "Family emergency", status: "pending", type: "Casual" },
-        { id: 2, user: { name: "Bob Johnson" }, date: "2024-05-12", reason: "Medical checkup", status: "pending", type: "Sick" }
-      ];
-      setPendingLeaves(mockPending);
-
-      const mockAll = [
-        ...mockPending,
-        { id: 3, user: { name: "Charlie Brown" }, date: "2024-05-01", status: "approved", type: "Earned" },
-        { id: 4, user: { name: "Diana Ross" }, date: "2024-05-05", status: "approved", type: "Sick" }
-      ];
-      setLeaves(mockAll);
+      const response = await api.get("/leave");
+      const leaveList = (response.data.data || []) as LeaveRecord[];
+      setLeaves(leaveList);
+      setPendingLeaves(leaveList.filter((leave) => leave.status === "pending"));
     } catch (err) {
+      console.error("Fetch Leaves Error:", err);
       showToast("Failed to load leaves", "error");
     } finally {
       setLoading(false);
@@ -56,7 +53,9 @@ export default function LeaveDashboardPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const nextMonth = () => {
@@ -65,6 +64,18 @@ export default function LeaveDashboardPage() {
 
   const prevMonth = () => {
     setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() - 1)));
+  };
+
+  const handleStatus = async (id: number | string, status: "approved" | "rejected") => {
+    try {
+      await api.patch(`/leave/${id}`, { status });
+      setLeaves((prev) => prev.map((leave) => leave.id === id ? { ...leave, status } : leave));
+      setPendingLeaves((prev) => prev.filter((leave) => leave.id !== id));
+      showToast(`Leave ${status}`, "success");
+    } catch (err) {
+      console.error("Update Leave Error:", err);
+      showToast("Failed to update leave", "error");
+    }
   };
 
   return (
@@ -105,6 +116,9 @@ export default function LeaveDashboardPage() {
                   <Plus className="h-4 w-4 mr-2" /> Assign Leave
                </Button>
              </Link>
+             <Button onClick={fetchData} className="btn-default p-2">
+               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+             </Button>
           </div>
         </div>
 
@@ -135,19 +149,24 @@ export default function LeaveDashboardPage() {
                  <div className="grid grid-cols-7 min-h-[400px]">
                     {Array.from({ length: 35 }).map((_, i) => {
                        const day = i - 3;
-                       const leave = leaves.find(l => new Date(l.date).getDate() === day);
+                       const leave = leaves.find(l => {
+                         const leaveDate = new Date(l.leave_date || l.date || "");
+                         return leaveDate.getFullYear() === currentMonth.getFullYear()
+                           && leaveDate.getMonth() === currentMonth.getMonth()
+                           && leaveDate.getDate() === day;
+                       });
                        
                        return (
-                         <div key={i} className={`relative p-2 border-r border-b border-[#f2f2f3] min-h-[80px] ${day < 1 || day > 31 ? 'bg-gray-50' : ''}`}>
+                         <div key={i} className={`relative p-2 border-r border-b border-t border-l border-[#9e9e9e2f] min-h-[80px] ${day < 1 || day > 31 ? 'bg-gray-50' : ''}`}>
                             {day >= 1 && day <= 31 && (
-                              <span className={`text-[10px] font-bold ${day === new Date().getDate() ? 'text-primary' : 'text-gray-400'}`}>
+                              <span className={`text-[16px] font-bold ${day === new Date().getDate() ? 'text-primary' : 'text-gray-400'}`}>
                                  {day}
                               </span>
                             )}
                             
                             {day >= 1 && day <= 31 && leave && (
                               <div className={`mt-1 p-1 text-[9px] border-l-2 ${leave.status === 'approved' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-orange-50 border-orange-500 text-orange-700'}`}>
-                                 <div className="truncate">{leave.user.name}</div>
+                                 <div className="truncate">{leave.user?.name || leave.employee?.name || "Unknown"}</div>
                               </div>
                             )}
                          </div>
@@ -165,13 +184,13 @@ export default function LeaveDashboardPage() {
                     {pendingLeaves.length > 0 ? pendingLeaves.map((request) => (
                       <div key={request.id} className="p-4 bg-gray-50 border border-[#f2f2f3]">
                          <div className="flex items-center justify-between mb-2">
-                            <div className="text-xs font-bold">{request.user.name}</div>
-                            <span className="text-[10px] text-gray-400">{request.date}</span>
+                            <div className="text-xs font-bold">{request.user?.name || request.employee?.name || "Unknown"}</div>
+                            <span className="text-[10px] text-gray-400">{request.leave_date || request.date}</span>
                          </div>
                          <div className="text-[11px] text-gray-500 mb-3">{request.reason}</div>
                          <div className="flex space-x-2">
-                            <Button className="btn-success p-1 text-[10px]">Approve</Button>
-                            <Button className="btn-danger p-1 text-[10px]">Reject</Button>
+                            <Button onClick={() => handleStatus(request.id, "approved")} className="btn-success p-1 text-[10px]">Approve</Button>
+                            <Button onClick={() => handleStatus(request.id, "rejected")} className="btn-danger p-1 text-[10px]">Reject</Button>
                          </div>
                       </div>
                     )) : (

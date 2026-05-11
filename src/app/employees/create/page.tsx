@@ -20,7 +20,8 @@ import {
   Info,
   ChevronDown,
   RefreshCw,
-  Shield
+  Shield,
+  Clock
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Button from "@/components/ui/Button";
@@ -43,10 +44,19 @@ export default function CreateEmployeePage() {
     id: number | string;
     name: string;
   };
+
+  type ShiftTypeOption = {
+    id: number | string;
+    shift_name: string;
+    code?: string;
+    start_time?: string;
+    end_time?: string;
+  };
   
   // Form Options
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [designations, setDesignations] = useState<DesignationOption[]>([]);
+  const [shiftTypes, setShiftTypes] = useState<ShiftTypeOption[]>([]);
 
   // Form State parity with Laravel
   const [formData, setFormData] = useState({
@@ -62,6 +72,7 @@ export default function CreateEmployeePage() {
     tags: "",
     designation: "",
     department: "",
+    shift_type_id: "",
     phone_code: "+1",
     mobile: "",
     hourly_rate: "",
@@ -80,8 +91,10 @@ export default function CreateEmployeePage() {
           api.get("/team"),
           api.get("/designation")
         ]);
+        const shiftRes = await api.get("/shift-types");
         setDepartments(deptRes.data.data || []);
         setDesignations(desigRes.data.data || []);
+        setShiftTypes(shiftRes.data.data || []);
         
         // Mock fallback if empty
         if (deptRes.data.data.length === 0) {
@@ -96,6 +109,11 @@ export default function CreateEmployeePage() {
             { id: 1, name: "Junior Developer" },
             { id: 2, name: "Senior Developer" },
             { id: 3, name: "Team Lead" }
+          ]);
+        }
+        if ((shiftRes.data.data || []).length === 0) {
+          setShiftTypes([
+            { id: 1, shift_name: "General Day Shift", code: "DAY", start_time: "09:00", end_time: "18:00" },
           ]);
         }
       } catch (err) {
@@ -126,7 +144,15 @@ export default function CreateEmployeePage() {
     setLoading(true);
     try {
       // Simulate API call to admin.employees.store
-      await api.post("/employee", formData);
+      const response = await api.post("/employee", formData);
+      const createdEmployeeId = response.data?.data?.id;
+
+      if (createdEmployeeId) {
+        await api.post("/employees/assignRole", {
+          user_id: createdEmployeeId,
+          role: formData.role,
+        });
+      }
       showToast("Employee created successfully!", "success");
       router.push("/employees");
     } catch (err) {
@@ -330,6 +356,30 @@ export default function CreateEmployeePage() {
                     </div>
                     <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
                       Company admins can manage this company&apos;s workspace.
+                    </p>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Shift Type</label>
+                    <div className="relative">
+                       <Clock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                       <select
+                         name="shift_type_id"
+                         value={formData.shift_type_id}
+                         onChange={handleInputChange}
+                         className="w-full bg-gray-50 border-none rounded-xl py-3.5 pl-12 pr-10 text-xs font-black uppercase tracking-tight outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer"
+                       >
+                          <option value="">Select Shift</option>
+                          {shiftTypes.map((shift) => (
+                            <option key={shift.id} value={shift.id}>
+                              {shift.shift_name} {shift.start_time && shift.end_time ? `(${shift.start_time}-${shift.end_time})` : ""}
+                            </option>
+                          ))}
+                       </select>
+                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300 pointer-events-none" />
+                    </div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                      Used for late, half-day, and overnight attendance calculations.
                     </p>
                  </div>
 

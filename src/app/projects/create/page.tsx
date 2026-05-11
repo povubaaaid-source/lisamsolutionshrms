@@ -13,6 +13,21 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/context/ToastContext";
 
+type OptionRecord = {
+  id: number | string;
+  name?: string;
+  category_name?: string;
+  project_name?: string;
+};
+
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+};
+
 const projectSchema = z.object({
   project_name: z.string().min(2, "Project name must be at least 2 characters"),
   start_date: z.string().min(1, "Start date is required"),
@@ -21,7 +36,7 @@ const projectSchema = z.object({
   category_id: z.string().optional(),
   client_id: z.string().optional(),
   project_summary: z.string().optional(),
-  status: z.enum(["not started", "in progress", "on hold", "cancelled", "finished"]),
+  status: z.enum(["not started", "in progress", "on hold", "canceled", "finished"]),
 }).refine((data) => {
   if (!data.without_deadline && !data.deadline) {
     return false;
@@ -37,8 +52,8 @@ type ProjectFormValues = z.infer<typeof projectSchema>;
 export default function CreateProjectPage() {
   const router = useRouter();
   const { showToast } = useToast();
-  const [categories, setCategories] = useState<any[]>([]);
-  const [clients, setClients] = useState<any[]>([]);
+  const [categories, setCategories] = useState<OptionRecord[]>([]);
+  const [clients, setClients] = useState<OptionRecord[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -61,6 +76,7 @@ export default function CreateProjectPage() {
     },
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const withoutDeadline = watch("without_deadline");
 
   useEffect(() => {
@@ -73,27 +89,20 @@ export default function CreateProjectPage() {
         setCategories(catRes.data.data || []);
         setClients(clientRes.data.data || []);
       } catch (err) {
-        console.error("Failed to fetch project options, using mock fallback:", err);
-        setCategories([
-          { id: 1, category_name: "Web Development" },
-          { id: 2, category_name: "Mobile App" },
-          { id: 3, category_name: "Marketing" }
-        ]);
-        setClients([
-          { id: 1, name: "Acme Corp" },
-          { id: 2, name: "Global Tech" }
-        ]);
+        console.error("Failed to fetch project options:", err);
+        showToast("Failed to load project options", "error");
       } finally {
         setLoadingOptions(false);
       }
     };
     fetchOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onSubmit = async (data: ProjectFormValues) => {
     setSaving(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         project_name: data.project_name,
         start_date: data.start_date,
         status: data.status,
@@ -118,9 +127,9 @@ export default function CreateProjectPage() {
       showToast("Project created successfully!");
       router.push("/projects");
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Create Project Error:", err);
-      showToast(err.response?.data?.message || "Failed to create project.", "error");
+      showToast(getApiErrorMessage(err, "Failed to create project."), "error");
     } finally {
       setSaving(false);
     }
@@ -215,7 +224,7 @@ export default function CreateProjectPage() {
                   className="w-full border-gray-200 border rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                 >
                   <option value="">--</option>
-                  {categories.map((cat: any) => (
+                  {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.category_name}</option>
                   ))}
                 </select>
@@ -228,7 +237,7 @@ export default function CreateProjectPage() {
                   className="w-full border-gray-200 border rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                 >
                   <option value="">--</option>
-                  {clients.map((client: any) => (
+                  {clients.map((client) => (
                     <option key={client.id} value={client.id}>{client.name}</option>
                   ))}
                 </select>
@@ -245,7 +254,7 @@ export default function CreateProjectPage() {
                   <option value="not started">Not Started</option>
                   <option value="in progress">In Progress</option>
                   <option value="on hold">On Hold</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value="canceled">Canceled</option>
                   <option value="finished">Finished</option>
                 </select>
                 {errors.status && <p className="text-[9px] text-red-500 mt-1 font-bold">{errors.status.message}</p>}

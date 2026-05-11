@@ -2,12 +2,23 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, Filter, RefreshCw, Edit, Trash2, Eye, FileText, AlertTriangle } from "lucide-react";
+import { Plus, RefreshCw, Edit, Trash2, Eye, FileText, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+
+type ExpenseRecord = {
+  id: number | string;
+  item_name?: string;
+  user?: { name?: string };
+  project?: { project_name?: string };
+  price?: number;
+  purchase_date?: string;
+  status?: string;
+};
 
 const statusColors: Record<string, string> = {
   approved: "bg-green-100 text-green-600",
@@ -16,10 +27,11 @@ const statusColors: Record<string, string> = {
 };
 
 export default function ExpensesPage() {
-  const [expenses, setExpenses] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("All");
-  const [deletingExpenseId, setDeletingExpenseId] = useState<number | null>(null);
+  const [deletingExpenseId, setDeletingExpenseId] = useState<number | string | null>(null);
 
   const fetchExpenses = async () => {
     setLoading(true);
@@ -28,13 +40,16 @@ export default function ExpensesPage() {
       setExpenses(response.data.data);
     } catch (err) {
       console.error("Fetch Expenses Error:", err);
+      showToast("Failed to load expenses", "error");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchExpenses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDelete = async () => {
@@ -43,15 +58,16 @@ export default function ExpensesPage() {
         await api.delete(`/expense/${deletingExpenseId}`);
         setExpenses(prev => prev.filter(e => e.id !== deletingExpenseId));
         setDeletingExpenseId(null);
+        showToast("Expense deleted successfully", "success");
       } catch (err) {
         console.error("Delete Expense Error:", err);
-        alert("Failed to delete expense");
+        showToast("Failed to delete expense", "error");
       }
     }
   };
 
   const filteredExpenses = expenses.filter(e => {
-    return statusFilter === "All" || e.status.toLowerCase() === statusFilter.toLowerCase();
+    return statusFilter === "All" || (e.status || "pending").toLowerCase() === statusFilter.toLowerCase();
   });
 
   return (
@@ -141,8 +157,8 @@ export default function ExpensesPage() {
                       {expense.purchase_date ? new Date(expense.purchase_date).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${statusColors[expense.status.toLowerCase()] || "bg-gray-100 text-gray-500"}`}>
-                        {expense.status}
+                      <span className={`rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${statusColors[(expense.status || "pending").toLowerCase()] || "bg-gray-100 text-gray-500"}`}>
+                        {expense.status || "pending"}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">

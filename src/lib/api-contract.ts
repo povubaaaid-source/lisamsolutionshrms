@@ -25,7 +25,9 @@ export type ApiResource =
   | "projects"
   | "proposals"
   | "reports"
+  | "role-permission"
   | "settings"
+  | "shift-types"
   | "tasks"
   | "tickets"
   | "time-logs";
@@ -84,6 +86,8 @@ const singularResourceMap: Record<string, string> = {
   project: "projects",
   "project-category": "project-categories",
   proposal: "proposals",
+  "role-permission": "role-permission",
+  "shift-type": "shift-types",
   task: "tasks",
   "task-category": "task-categories",
   "task-label": "task-labels",

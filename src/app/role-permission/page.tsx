@@ -1,149 +1,261 @@
 "use client";
 
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import Card from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
-import { ArrowLeft, Save, Shield, Check, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { ArrowLeft, Check, Lock, Save, Shield, UserCog } from "lucide-react";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import api from "@/lib/api";
+import { roleDefinitions, rolePermissions, type PermissionAction, type PermissionKey, type UserRole } from "@/lib/auth-contract";
+import { useToast } from "@/context/ToastContext";
+
+type EditableRole = Exclude<UserRole, "super_admin">;
+
+type PermissionModule = {
+  key: string;
+  label: string;
+  actions: PermissionAction[];
+};
+
+const editableRoles: EditableRole[] = ["admin", "employee", "client"];
+
+const permissionModules: PermissionModule[] = [
+  { key: "employees", label: "Employees", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "clients", label: "Clients", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "hr", label: "HR Settings", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "attendance", label: "Attendance", actions: ["view", "create", "edit", "approve", "export"] },
+  { key: "leaves", label: "Leaves", actions: ["view", "create", "edit", "approve", "delete"] },
+  { key: "projects", label: "Projects", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "tasks", label: "Tasks", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "finance", label: "Finance", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "payroll", label: "Payroll", actions: ["view", "create", "edit", "approve", "export"] },
+  { key: "tickets", label: "Tickets", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "recruitment", label: "Recruitment", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "reports", label: "Reports", actions: ["view", "export"] },
+  { key: "settings", label: "Settings", actions: ["view", "edit", "manage"] },
+  { key: "roles", label: "Roles & Permissions", actions: ["view", "create", "edit", "delete", "manage"] },
+];
+
+const STORAGE_KEY = "worksuite_role_permission_overrides";
+
+function readStoredPermissions() {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}") as Partial<Record<EditableRole, PermissionKey[]>>;
+  } catch {
+    return {};
+  }
+}
+
+function buildInitialPermissions() {
+  const stored = readStoredPermissions();
+  return editableRoles.reduce<Record<EditableRole, PermissionKey[]>>((accumulator, role) => {
+    accumulator[role] = stored[role] || rolePermissions[role];
+    return accumulator;
+  }, {} as Record<EditableRole, PermissionKey[]>);
+}
+
+function permissionKey(moduleKey: string, action: PermissionAction): PermissionKey {
+  return `${moduleKey}.${action}` as PermissionKey;
+}
+
+function hasPermission(permissions: PermissionKey[], moduleKey: string, action: PermissionAction) {
+  return permissions.includes("*") || permissions.includes(`${moduleKey}.*` as PermissionKey) || permissions.includes(permissionKey(moduleKey, action));
+}
+
+function togglePermission(permissions: PermissionKey[], moduleKey: string, action: PermissionAction) {
+  const key = permissionKey(moduleKey, action);
+  return permissions.includes(key) ? permissions.filter((item) => item !== key) : [...permissions, key];
+}
 
 export default function RolePermissionPage() {
-  const [activeRole, setActiveRole] = useState("Admin");
+  const { showToast } = useToast();
+  const [activeRole, setActiveRole] = useState<EditableRole>("admin");
+  const [permissionState, setPermissionState] = useState<Record<EditableRole, PermissionKey[]>>(buildInitialPermissions);
+  const [saving, setSaving] = useState(false);
 
-  const roles = ["Admin", "Employee", "Client"];
+  const activePermissions = permissionState[activeRole];
+  const isAdminLocked = activeRole === "admin";
+  const selectedCount = useMemo(() => activePermissions.length, [activePermissions]);
 
-  const permissionsList = [
-    { module: "Projects", actions: ["Add", "View", "Edit", "Delete"] },
-    { module: "Tasks", actions: ["Add", "View", "Edit", "Delete"] },
-    { module: "Clients", actions: ["Add", "View", "Edit", "Delete"] },
-    { module: "Employees", actions: ["Add", "View", "Edit", "Delete"] },
-    { module: "Invoices", actions: ["Add", "View", "Edit", "Delete"] },
-    { module: "Tickets", actions: ["Add", "View", "Edit", "Delete"] },
-    { module: "Time Logs", actions: ["Add", "View", "Edit", "Delete"] },
-    { module: "Messages", actions: ["Add", "View", "Edit", "Delete"] },
-  ];
+  const updatePermissions = (role: EditableRole, permissions: PermissionKey[]) => {
+    setPermissionState((current) => ({ ...current, [role]: permissions }));
+  };
+
+  const handleToggle = (moduleKey: string, action: PermissionAction) => {
+    if (isAdminLocked) return;
+    updatePermissions(activeRole, togglePermission(activePermissions, moduleKey, action));
+  };
+
+  const handleAssignAll = () => {
+    if (isAdminLocked) return;
+    const allPermissions = permissionModules.flatMap((moduleItem) =>
+      moduleItem.actions.map((action) => permissionKey(moduleItem.key, action)),
+    );
+    updatePermissions(activeRole, allPermissions);
+  };
+
+  const handleRemoveAll = () => {
+    if (isAdminLocked) return;
+    updatePermissions(activeRole, []);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const nextState = { ...permissionState, admin: rolePermissions.admin };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+
+    try {
+      await api.post("/role-permission/assignRole", {
+        role: activeRole,
+        permissions: nextState[activeRole],
+      });
+      showToast("Role permissions saved successfully.");
+    } catch {
+      showToast("Permissions saved locally. Future PHP endpoint should accept role and permissions payload.", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between bg-white px-6 py-4 shadow-sm -mx-6 -mt-6 mb-6 border-b border-gray-100">
+        <div className="-mx-4 -mt-4 flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 bg-white px-4 py-4 shadow-sm sm:-mx-6 sm:-mt-6 sm:px-6">
           <div>
-            <h1 className="text-base font-semibold text-gray-700">Roles & Permissions</h1>
-            <div className="text-xs text-gray-500 flex items-center space-x-1 mt-1">
-              <Link href="/dashboard" className="hover:text-primary transition-colors font-bold">Home</Link>
-              <span className="font-bold">/</span>
-              <Link href="/settings" className="hover:text-primary transition-colors font-bold">Settings</Link>
-              <span className="font-bold">/</span>
-              <span className="text-gray-700 font-bold">Roles & Permissions</span>
-            </div>
+            <h1 className="text-base font-black uppercase tracking-widest text-gray-800">Roles & Permissions</h1>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              Laravel-style role permission matrix for admin, employee, and client access
+            </p>
           </div>
           <Link href="/settings">
-            <Button className="bg-gray-100 text-gray-600 border-none text-[10px] h-8 px-3 hover:bg-gray-200">
-              <ArrowLeft className="h-3 w-3 mr-1" />
-              <span>Back to Settings</span>
+            <Button className="h-10 border-none bg-gray-100 px-4 text-[10px] font-black uppercase tracking-widest text-gray-500">
+              <ArrowLeft className="h-4 w-4" />
+              Settings
             </Button>
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Roles Sidebar */}
-          <div className="lg:col-span-1 space-y-4">
-            <Card className="p-0 border-gray-100 bg-white shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-gray-50 bg-gray-50/50 flex items-center justify-between">
-                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Roles</h3>
-                <Button className="bg-primary/10 text-primary border-none text-[10px] h-7 px-2 hover:bg-primary hover:text-white transition-colors">
-                  <Plus className="h-3 w-3" />
-                </Button>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
+          <div className="space-y-4">
+            <Card className="overflow-hidden border-none bg-white p-0 shadow-sm">
+              <div className="border-b border-gray-50 bg-gray-50/60 p-4">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">System Roles</h3>
               </div>
-              <div className="p-2 space-y-1">
-                {roles.map((role) => (
+              <div className="space-y-2 p-3">
+                <div className="rounded-xl border border-dashed border-gray-200 p-4">
+                  <div className="flex items-center gap-3">
+                    <Lock className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-gray-700">Super Admin</p>
+                      <p className="mt-1 text-[10px] font-bold text-gray-400">Platform role managed separately.</p>
+                    </div>
+                  </div>
+                </div>
+                {editableRoles.map((role) => (
                   <button
                     key={role}
+                    type="button"
                     onClick={() => setActiveRole(role)}
-                    className={`w-full text-left px-4 py-3 rounded text-sm font-bold transition-colors flex items-center justify-between group ${
-                      activeRole === role
-                        ? "bg-primary text-white"
-                        : "text-gray-600 hover:bg-gray-50"
+                    className={`w-full rounded-xl p-4 text-left transition-colors ${
+                      activeRole === role ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-gray-50 text-gray-600 hover:bg-gray-100"
                     }`}
                   >
-                    <div className="flex items-center">
-                      <Shield className={`h-4 w-4 mr-3 ${activeRole === role ? "text-white/70" : "text-gray-400"}`} />
-                      {role}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <Shield className="h-4 w-4" />
+                        <span className="text-xs font-black uppercase tracking-widest">{roleDefinitions[role].label}</span>
+                      </div>
+                      {activeRole === role && <Check className="h-4 w-4" />}
                     </div>
-                    {role !== "Admin" && (
-                       <Trash2 className={`h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity ${activeRole === role ? "text-white/50 hover:text-white" : "text-red-400 hover:text-red-600"}`} />
-                    )}
+                    <p className={`mt-2 text-[10px] font-bold leading-5 ${activeRole === role ? "text-white/75" : "text-gray-400"}`}>
+                      {roleDefinitions[role].description}
+                    </p>
                   </button>
                 ))}
               </div>
             </Card>
-            
-            <Card className="p-4 border-gray-100 bg-yellow-50 shadow-sm border border-yellow-200">
-              <h4 className="text-xs font-bold text-yellow-800 mb-2">Note:</h4>
-              <p className="text-[10px] text-yellow-700 leading-relaxed">The <strong>Admin</strong> role has full access to all modules by default and cannot be deleted or restricted.</p>
+
+            <Card className="border border-blue-100 bg-blue-50 p-4 shadow-sm">
+              <div className="flex gap-3">
+                <UserCog className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
+                <p className="text-[11px] font-bold leading-5 text-blue-700">
+                  Admin role remains locked with full company access, matching the Laravel admin panel behavior.
+                </p>
+              </div>
             </Card>
           </div>
 
-          {/* Permissions Matrix */}
-          <div className="lg:col-span-3">
-            <Card className="p-0 border-gray-100 bg-white shadow-sm overflow-hidden flex flex-col h-full">
-              <div className="p-6 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-gray-800 tracking-wide flex items-center">
-                    <Shield className="h-4 w-4 mr-2 text-primary" /> 
-                    {activeRole} Permissions
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-1">Configure access levels for the {activeRole} role across the platform.</p>
-                </div>
-                <Button className="bg-primary text-white text-[10px] font-bold px-6 h-9 uppercase tracking-widest shadow-sm shadow-primary/20">
-                  <Save className="h-3.5 w-3.5 mr-2" /> Save Changes
+          <Card className="overflow-hidden border-none bg-white p-0 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-50 bg-gray-50/40 p-5">
+              <div>
+                <h2 className="text-sm font-black uppercase tracking-widest text-gray-800">
+                  {roleDefinitions[activeRole].label} Permissions
+                </h2>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  {selectedCount} permission entries selected
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" onClick={handleAssignAll} disabled={isAdminLocked} className="h-9 border-none bg-gray-100 px-4 text-[9px] font-black uppercase tracking-widest text-gray-500">
+                  Assign All
+                </Button>
+                <Button type="button" onClick={handleRemoveAll} disabled={isAdminLocked} className="h-9 border-none bg-gray-100 px-4 text-[9px] font-black uppercase tracking-widest text-gray-500">
+                  Remove All
+                </Button>
+                <Button type="button" onClick={handleSave} loading={saving} className="h-9 bg-primary px-5 text-[9px] font-black uppercase tracking-widest text-white">
+                  <Save className="h-4 w-4" />
+                  Save
                 </Button>
               </div>
+            </div>
 
-              <div className="p-0 overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest w-1/3">Module Name</th>
-                      <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-center">Add</th>
-                      <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-center">View</th>
-                      <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-center">Edit</th>
-                      <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-center">Delete</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {permissionsList.map((perm) => (
-                      <tr key={perm.module} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4 text-sm font-bold text-gray-700">{perm.module}</td>
-                        {perm.actions.map((action, idx) => {
-                          // Mocking checked state based on role
-                          let isChecked = false;
-                          if (activeRole === "Admin") isChecked = true;
-                          else if (activeRole === "Employee" && (action === "View" || action === "Add")) isChecked = true;
-                          else if (activeRole === "Client" && action === "View" && (perm.module === "Projects" || perm.module === "Invoices")) isChecked = true;
-
-                          return (
-                            <td key={idx} className="px-6 py-4 text-center">
-                               <label className="relative inline-flex items-center cursor-pointer">
-                                  <input 
-                                    type="checkbox" 
-                                    className="sr-only peer" 
-                                    checked={isChecked}
-                                    readOnly
-                                    disabled={activeRole === "Admin"}
-                                  />
-                                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary opacity-80 peer-disabled:opacity-50"></div>
-                                </label>
-                            </td>
-                          )
-                        })}
-                      </tr>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="border-b border-gray-100 bg-gray-50">
+                  <tr>
+                    <th className="min-w-56 px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Module</th>
+                    {["view", "create", "edit", "delete", "approve", "export", "manage"].map((action) => (
+                      <th key={action} className="px-4 py-4 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">
+                        {action}
+                      </th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </div>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {permissionModules.map((moduleItem) => (
+                    <tr key={moduleItem.key} className="hover:bg-gray-50/60">
+                      <td className="px-6 py-4 text-xs font-black uppercase tracking-widest text-gray-700">{moduleItem.label}</td>
+                      {(["view", "create", "edit", "delete", "approve", "export", "manage"] as PermissionAction[]).map((action) => {
+                        const allowedAction = moduleItem.actions.includes(action);
+                        const checked = hasPermission(activePermissions, moduleItem.key, action);
+                        return (
+                          <td key={action} className="px-4 py-4 text-center">
+                            {allowedAction ? (
+                              <button
+                                type="button"
+                                disabled={isAdminLocked}
+                                onClick={() => handleToggle(moduleItem.key, action)}
+                                className={`mx-auto flex h-7 w-12 items-center rounded-full p-1 transition-colors ${
+                                  checked ? "bg-primary" : "bg-gray-200"
+                                } ${isAdminLocked ? "cursor-not-allowed opacity-60" : "hover:ring-2 hover:ring-primary/20"}`}
+                                aria-label={`${checked ? "Disable" : "Enable"} ${moduleItem.label} ${action}`}
+                              >
+                                <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : ""}`} />
+                              </button>
+                            ) : (
+                              <span className="text-gray-200">-</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
       </div>
     </DashboardLayout>

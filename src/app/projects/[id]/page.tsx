@@ -25,8 +25,7 @@ import {
   Edit, 
   MoreVertical,
   Paperclip,
-  Milestone,
-  X
+  Milestone
 } from "lucide-react";
 
 const tabs = [
@@ -56,6 +55,14 @@ const getStatusColor = (status: string) => {
   }
 };
 
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+};
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -70,9 +77,9 @@ export default function ProjectDetailPage() {
       try {
         const response = await api.get(`/project/${params.id}`);
         setProject(response.data.data);
-      } catch (err: any) {
+      } catch (err) {
         console.error("Fetch Project Error:", err);
-        setError(err.response?.data?.message || "Failed to load project details.");
+        setError(getApiErrorMessage(err, "Failed to load project details."));
         showToast("Error loading project details.", "error");
       } finally {
         setLoading(false);
@@ -118,7 +125,7 @@ export default function ProjectDetailPage() {
               </div>
               <div>
                  <h1 className="text-xl font-black text-gray-800 uppercase tracking-widest">{project.project_name}</h1>
-                 <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mt-0.5">Project ID: #{project.id} • Client: <span className="text-primary">{project.client?.client_detail?.company_name || project.client?.name || "No Client"}</span></p>
+                 <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mt-0.5">Project ID: #{project.id} / Client: <span className="text-primary">{project.client?.client_detail?.company_name || project.client?.name || "No Client"}</span></p>
               </div>
            </div>
            <div className="flex items-center space-x-3">

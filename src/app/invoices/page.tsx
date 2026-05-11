@@ -3,11 +3,22 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { Plus, Filter, RefreshCw, Edit, Trash2, Eye, Download, Send, CreditCard, AlertTriangle, FileText } from "lucide-react";
+import { Plus, RefreshCw, Trash2, Eye, Download, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+
+type InvoiceRecord = {
+  id: number | string;
+  invoice_number?: string;
+  client?: { name?: string; client_detail?: { company_name?: string } };
+  project?: { project_name?: string };
+  total?: number;
+  issue_date?: string;
+  status?: string;
+};
 
 const statusColors: Record<string, string> = {
   "paid": "bg-green-100 text-green-600",
@@ -18,10 +29,11 @@ const statusColors: Record<string, string> = {
 };
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("All");
-  const [deletingInvoiceId, setDeletingInvoiceId] = useState<number | null>(null);
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<number | string | null>(null);
 
   const fetchInvoices = async () => {
     setLoading(true);
@@ -30,17 +42,20 @@ export default function InvoicesPage() {
       setInvoices(response.data.data);
     } catch (err) {
       console.error("Fetch Invoices Error:", err);
+      showToast("Failed to load invoices", "error");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredInvoices = invoices.filter(inv => {
-    return statusFilter === "All" || inv.status.toLowerCase() === statusFilter.toLowerCase();
+    return statusFilter === "All" || (inv.status || "draft").toLowerCase() === statusFilter.toLowerCase();
   });
 
   const handleDelete = async () => {
@@ -49,9 +64,10 @@ export default function InvoicesPage() {
         await api.delete(`/invoice/${deletingInvoiceId}`);
         setInvoices(prev => prev.filter(inv => inv.id !== deletingInvoiceId));
         setDeletingInvoiceId(null);
+        showToast("Invoice deleted successfully", "success");
       } catch (err) {
         console.error("Delete Invoice Error:", err);
-        alert("Failed to delete invoice");
+        showToast("Failed to delete invoice", "error");
       }
     }
   };
@@ -144,8 +160,8 @@ export default function InvoicesPage() {
                       {inv.issue_date ? new Date(inv.issue_date).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${statusColors[inv.status.toLowerCase()] || "bg-gray-100 text-gray-500"}`}>
-                        {inv.status}
+                      <span className={`rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${statusColors[(inv.status || "draft").toLowerCase()] || "bg-gray-100 text-gray-500"}`}>
+                        {inv.status || "draft"}
                       </span>
                     </td>
                     <td className="px-6 py-4">

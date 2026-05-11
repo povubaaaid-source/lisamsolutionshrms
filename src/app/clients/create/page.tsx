@@ -13,6 +13,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/context/ToastContext";
 
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+};
+
 const clientSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email address"),
@@ -66,9 +74,9 @@ export default function CreateClientPage() {
       showToast("Client created successfully!");
       router.push("/clients");
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Create Client Error:", err);
-      showToast(err.response?.data?.message || "Failed to create client.", "error");
+      showToast(getApiErrorMessage(err, "Failed to create client."), "error");
     } finally {
       setSaving(false);
     }
@@ -140,7 +148,7 @@ export default function CreateClientPage() {
                   <input 
                     {...register("password")}
                     type="password" 
-                    placeholder="••••••••" 
+                    placeholder="Password" 
                     className={`w-full border rounded p-2.5 pl-9 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all ${
                       errors.password ? "border-red-500" : "border-gray-200"
                     }`} 

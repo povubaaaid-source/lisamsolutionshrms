@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -11,7 +10,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/context/ToastContext";
-import { RefreshCw, Save, ArrowLeft, User, AlertCircle, Camera } from "lucide-react";
+import { RefreshCw, Save, ArrowLeft, AlertCircle, Shield, Clock } from "lucide-react";
 import { Employee } from "@/types";
 
 const employeeSchema = z.object({
@@ -22,11 +21,47 @@ const employeeSchema = z.object({
   joining_date: z.string().min(1, "Joining date is required"),
   department_id: z.string().min(1, "Please select a department"),
   designation_id: z.string().min(1, "Please select a designation"),
+  shift_type_id: z.string().optional(),
+  role: z.enum(["admin", "employee"]),
   mobile: z.string().optional(),
   address: z.string().optional(),
 });
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
+
+type DepartmentOption = {
+  id: number | string;
+  team_name: string;
+};
+
+type DesignationOption = {
+  id: number | string;
+  name: string;
+};
+
+type ShiftTypeOption = {
+  id: number | string;
+  shift_name: string;
+  code?: string;
+  start_time?: string;
+  end_time?: string;
+};
+
+type EmployeeUpdatePayload = {
+  name: string;
+  email: string;
+  role: "admin" | "employee";
+  password?: string;
+  employee_detail: {
+    employee_id: string;
+    joining_date: string;
+    department_id: string;
+    designation_id: string;
+    shift_type_id?: string;
+    mobile?: string;
+    address?: string;
+  };
+};
 
 export default function EditEmployeePage() {
   const params = useParams();
@@ -35,8 +70,9 @@ export default function EditEmployeePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [employee, setEmployee] = useState<Employee | null>(null);
-  const [departments, setDepartments] = useState<any[]>([]);
-  const [designations, setDesignations] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [designations, setDesignations] = useState<DesignationOption[]>([]);
+  const [shiftTypes, setShiftTypes] = useState<ShiftTypeOption[]>([]);
 
   const {
     register,
@@ -50,16 +86,18 @@ export default function EditEmployeePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [empRes, deptRes, desigRes] = await Promise.all([
+        const [empRes, deptRes, desigRes, shiftRes] = await Promise.all([
           api.get(`/employee/${params.id}`),
           api.get("/department"),
-          api.get("/designation")
+          api.get("/designation"),
+          api.get("/shift-types"),
         ]);
 
         const data = empRes.data.data as Employee;
         setEmployee(data);
         setDepartments(deptRes.data.data || []);
         setDesignations(desigRes.data.data || []);
+        setShiftTypes(shiftRes.data.data || []);
 
         reset({
           name: data.name,
@@ -68,10 +106,12 @@ export default function EditEmployeePage() {
           joining_date: data.employee_detail?.joining_date || "",
           department_id: data.employee_detail?.department_id?.toString() || "",
           designation_id: data.employee_detail?.designation_id?.toString() || "",
+          shift_type_id: data.employee_detail?.shift_type_id?.toString() || "",
+          role: data.role === "admin" ? "admin" : "employee",
           mobile: data.employee_detail?.mobile || "",
           address: data.employee_detail?.address || "",
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Fetch Edit Data Error:", err);
         showToast("Failed to load employee data.", "error");
       } finally {
@@ -83,16 +123,18 @@ export default function EditEmployeePage() {
 
   const onSubmit = async (data: EmployeeFormValues) => {
     setSaving(true);
-    try {
-      const payload: any = {
+      try {
+      const payload: EmployeeUpdatePayload = {
         name: data.name,
         email: data.email,
+        role: data.role,
         employee_detail: {
           employee_id: data.employee_id,
           joining_date: data.joining_date,
-          department_id: data.department_id,
-          designation_id: data.designation_id,
-          mobile: data.mobile,
+            department_id: data.department_id,
+            designation_id: data.designation_id,
+            shift_type_id: data.shift_type_id,
+            mobile: data.mobile,
           address: data.address
         }
       };
@@ -102,12 +144,20 @@ export default function EditEmployeePage() {
       }
 
       await api.put(`/employee/${params.id}`, payload);
+      await api.post("/employees/assignRole", {
+        user_id: params.id,
+        role: data.role,
+      });
       showToast("Employee updated successfully!");
       router.push(`/employees/${params.id}`);
       router.refresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Update Employee Error:", err);
-      showToast(err.response?.data?.message || "Failed to update employee.", "error");
+      const errorMessage =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      showToast(errorMessage || "Failed to update employee.", "error");
     } finally {
       setSaving(false);
     }
@@ -239,12 +289,51 @@ export default function EditEmployeePage() {
                        </select>
                        {errors.designation_id && <p className="text-[9px] text-red-500 mt-1 font-bold">{errors.designation_id.message}</p>}
                     </div>
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Shift Type</label>
+                       <div className="relative">
+                          <Clock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
+                          <select
+                             {...register("shift_type_id")}
+                             className="w-full bg-gray-50 border-none rounded-xl p-3 pl-12 text-xs font-bold focus:ring-1 focus:ring-primary outline-none appearance-none cursor-pointer"
+                          >
+                             <option value="">Select Shift</option>
+                             {shiftTypes.map((shift) => (
+                               <option key={shift.id} value={shift.id}>
+                                 {shift.shift_name} {shift.start_time && shift.end_time ? `(${shift.start_time}-${shift.end_time})` : ""}
+                               </option>
+                             ))}
+                          </select>
+                       </div>
+                       <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Used by attendance calculations.</p>
+                    </div>
                     <div className="space-y-1.5 md:col-span-2">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Current Address</label>
                        <textarea 
                           {...register("address")}
                           className="w-full bg-gray-50 border-none rounded-xl p-3 text-xs font-bold focus:ring-1 focus:ring-primary outline-none h-24"
                        />
+                    </div>
+                 </div>
+              </Card>
+
+              <Card title="Access & Role" className="border-none shadow-sm p-8 bg-white">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">System Access Role</label>
+                       <div className="relative">
+                          <Shield className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
+                          <select
+                             {...register("role")}
+                             className="w-full bg-gray-50 border-none rounded-xl p-3 pl-12 text-xs font-bold focus:ring-1 focus:ring-primary outline-none appearance-none cursor-pointer"
+                          >
+                             <option value="employee">Employee</option>
+                             <option value="admin">Company Admin</option>
+                          </select>
+                       </div>
+                       <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                         Company Admin grants access to company management modules. Employee keeps member portal access.
+                       </p>
                     </div>
                  </div>
               </Card>
@@ -277,7 +366,7 @@ export default function EditEmployeePage() {
                     </div>
                     <div className="flex items-center justify-between">
                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Type</p>
-                       <p className="text-xs font-black text-gray-800 uppercase">Employee</p>
+                       <p className="text-xs font-black text-gray-800 uppercase">{employee.role || "employee"}</p>
                     </div>
                  </div>
               </Card>

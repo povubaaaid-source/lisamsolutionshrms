@@ -3,16 +3,32 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { ArrowLeft, Save, RefreshCw, User, Calendar as CalendarIcon } from "lucide-react";
+import { ArrowLeft, Save, RefreshCw, User } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+
+type OptionRecord = {
+  id: number | string;
+  name?: string;
+  type_name?: string;
+};
+
+const getApiErrorMessage = (err: unknown, fallback: string) => {
+  if (typeof err === "object" && err && "response" in err) {
+    const response = (err as { response?: { data?: { message?: string; error?: string } } }).response;
+    return response?.data?.message || response?.data?.error || fallback;
+  }
+  return fallback;
+};
 
 export default function CreateLeavePage() {
   const router = useRouter();
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<any[]>([]);
+  const { showToast } = useToast();
+  const [employees, setEmployees] = useState<OptionRecord[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<OptionRecord[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -35,20 +51,14 @@ export default function CreateLeavePage() {
         setEmployees(empRes.data.data || []);
         setLeaveTypes(typeRes.data.data || []);
       } catch (err) {
-        console.error("Failed to fetch leave options, using mock fallback:", err);
-        setEmployees([
-          { id: 1, name: "Alice Smith" },
-          { id: 2, name: "John Doe" }
-        ]);
-        setLeaveTypes([
-          { id: 1, type_name: "Sick Leave" },
-          { id: 2, type_name: "Casual Leave" }
-        ]);
+        console.error("Failed to fetch leave options:", err);
+        showToast("Failed to load leave options", "error");
       } finally {
         setLoadingOptions(false);
       }
     };
     fetchOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -61,7 +71,7 @@ export default function CreateLeavePage() {
     setError("");
 
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         user: { id: formData.user_id },
         type: { id: formData.type_id },
         duration: formData.duration,
@@ -69,21 +79,13 @@ export default function CreateLeavePage() {
         status: formData.status
       };
 
-      // Mock testing bypass
-      if (localStorage.getItem("token") === "mock_token_12345") {
-        setTimeout(() => {
-          router.push("/leaves");
-          router.refresh();
-        }, 800);
-        return;
-      }
-
       await api.post("/leave", payload);
+      showToast("Leave saved successfully", "success");
       router.push("/leaves");
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Create Leave Error:", err);
-      setError(err.response?.data?.message || err.response?.data?.error || "Failed to create leave.");
+      setError(getApiErrorMessage(err, "Failed to create leave."));
     } finally {
       setSaving(false);
     }
@@ -140,7 +142,7 @@ export default function CreateLeavePage() {
                     required
                   >
                     <option value="">Select Employee</option>
-                    {employees.map((emp: any) => (
+                    {employees.map((emp) => (
                       <option key={emp.id} value={emp.id}>{emp.name}</option>
                     ))}
                   </select>
@@ -157,7 +159,7 @@ export default function CreateLeavePage() {
                   required
                 >
                   <option value="">Select Type</option>
-                  {leaveTypes.map((type: any) => (
+                  {leaveTypes.map((type) => (
                     <option key={type.id} value={type.id}>{type.type_name}</option>
                   ))}
                 </select>

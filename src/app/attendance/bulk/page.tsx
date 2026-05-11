@@ -8,23 +8,35 @@ import {
   Save, 
   Users, 
   Building2, 
-  Calendar, 
   Clock, 
   MapPin,
   ChevronDown,
   Info,
-  Check
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 
+type TeamRecord = {
+  id: number | string;
+  team_name?: string;
+  name?: string;
+};
+
+type EmployeeRecord = {
+  id: number | string;
+  name: string;
+  employee_detail?: {
+    department?: { id?: number | string; team_name?: string };
+  };
+};
+
 export default function BulkAttendancePage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [teams, setTeams] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [teams, setTeams] = useState<TeamRecord[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   
   // Form State
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
@@ -46,43 +58,17 @@ export default function BulkAttendancePage() {
           api.get("/employee")
         ]);
         
-        let teamList = teamsRes.data.data || [];
-        if (teamList.length === 0) {
-          teamList = [
-            { id: 1, team_name: "Marketing" },
-            { id: 2, team_name: "Sales" },
-            { id: 3, team_name: "Engineering" },
-            { id: 4, team_name: "Human Resources" }
-          ];
-        }
-        setTeams(teamList);
-
-        let empList = empRes.data.data || [];
-        if (empList.length === 0) {
-          empList = [
-            { id: 1, name: "John Doe" },
-            { id: 2, name: "Jane Smith" },
-            { id: 3, name: "Mike Tyson" },
-            { id: 4, name: "Sarah Wilson" },
-            { id: 5, name: "Robert Fox" }
-          ];
-        }
-        setEmployees(empList);
+        setTeams(teamsRes.data.data || []);
+        setEmployees(empRes.data.data || []);
       } catch (err) {
         console.error("Fetch Data Error:", err);
-        setTeams([
-          { id: 1, team_name: "Marketing" },
-          { id: 2, team_name: "Sales" }
-        ]);
-        setEmployees([
-          { id: 1, name: "John Doe" },
-          { id: 2, name: "Jane Smith" }
-        ]);
+        showToast("Failed to load attendance options", "error");
       } finally {
         setLoading(false);
       }
     };
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSave = async () => {
@@ -93,10 +79,34 @@ export default function BulkAttendancePage() {
     
     setLoading(true);
     try {
-      // Simulate API call parity with admin.attendances.bulk-store
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const selectedTeamSet = new Set(selectedTeams);
+      const employeeIds = new Set(selectedEmployees);
+      employees.forEach((employee) => {
+        const departmentId = employee.employee_detail?.department?.id;
+        if (departmentId && selectedTeamSet.has(String(departmentId))) {
+          employeeIds.add(String(employee.id));
+        }
+      });
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const date = `${year}-${String(month).padStart(2, "0")}-01`;
+      await Promise.all(
+        Array.from(employeeIds).map((employeeId) =>
+          api.post("/attendance", {
+            employee_id: employeeId,
+            date,
+            status: isLate ? "late" : isHalfDay ? "half-day" : "present",
+            clock_in: clockIn,
+            clock_out: clockOut,
+            working_from: workingFrom,
+            late: isLate,
+            half_day: isHalfDay,
+            days_in_month: daysInMonth,
+          }),
+        ),
+      );
       showToast("Bulk attendance processed for selected members!", "success");
     } catch (err) {
+      console.error("Bulk Attendance Error:", err);
       showToast("Failed to process bulk attendance.", "error");
     } finally {
       setLoading(false);
@@ -145,7 +155,7 @@ export default function BulkAttendancePage() {
                          }}
                        >
                           {teams.map(team => (
-                             <option key={team.id} value={team.id} className="py-2.5 px-3 rounded-xl mb-1.5 hover:bg-white checked:bg-primary checked:text-white transition-colors">{team.team_name}</option>
+                             <option key={team.id} value={team.id} className="py-2.5 px-3 rounded-xl mb-1.5 hover:bg-white checked:bg-primary checked:text-white transition-colors">{team.team_name || team.name}</option>
                           ))}
                        </select>
                     </div>
@@ -288,9 +298,11 @@ export default function BulkAttendancePage() {
               <div className="pt-6 flex justify-end">
                  <Button 
                    onClick={handleSave}
+                   disabled={loading}
                    className="w-full sm:w-auto bg-primary text-white text-[9px] sm:text-[10px] font-black px-6 sm:px-12 h-12 sm:h-14 uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all flex items-center justify-center"
                  >
-                    <Save className="h-4 w-4 sm:h-5 sm:w-5 mr-3" /> Process Bulk Attendance
+                    {loading ? <Clock className="h-4 w-4 sm:h-5 sm:w-5 mr-3 animate-spin" /> : <Save className="h-4 w-4 sm:h-5 sm:w-5 mr-3" />}
+                    {loading ? "Processing..." : "Process Bulk Attendance"}
                  </Button>
               </div>
            </div>
