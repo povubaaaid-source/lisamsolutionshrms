@@ -7,36 +7,12 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import api from "@/lib/api";
-import { roleDefinitions, rolePermissions, type PermissionAction, type PermissionKey, type UserRole } from "@/lib/auth-contract";
+import { permissionActions, permissionKey, permissionModules, roleDefinitions, rolePermissions, type PermissionAction, type PermissionKey, type UserRole } from "@/lib/auth-contract";
 import { useToast } from "@/context/ToastContext";
 
 type EditableRole = Exclude<UserRole, "super_admin">;
 
-type PermissionModule = {
-  key: string;
-  label: string;
-  actions: PermissionAction[];
-};
-
 const editableRoles: EditableRole[] = ["admin", "employee", "client"];
-
-const permissionModules: PermissionModule[] = [
-  { key: "employees", label: "Employees", actions: ["view", "create", "edit", "delete", "export"] },
-  { key: "clients", label: "Clients", actions: ["view", "create", "edit", "delete", "export"] },
-  { key: "hr", label: "HR Settings", actions: ["view", "create", "edit", "delete", "manage"] },
-  { key: "shifts", label: "Shift Types", actions: ["view", "create", "edit", "delete", "manage"] },
-  { key: "attendance", label: "Attendance", actions: ["view", "create", "edit", "approve", "export"] },
-  { key: "leaves", label: "Leaves", actions: ["view", "create", "edit", "approve", "delete"] },
-  { key: "projects", label: "Projects", actions: ["view", "create", "edit", "delete", "export"] },
-  { key: "tasks", label: "Tasks", actions: ["view", "create", "edit", "delete", "manage"] },
-  { key: "finance", label: "Finance", actions: ["view", "create", "edit", "delete", "export"] },
-  { key: "payroll", label: "Payroll", actions: ["view", "create", "edit", "approve", "export"] },
-  { key: "tickets", label: "Tickets", actions: ["view", "create", "edit", "delete", "manage"] },
-  { key: "recruitment", label: "Recruitment", actions: ["view", "create", "edit", "delete", "manage"] },
-  { key: "reports", label: "Reports", actions: ["view", "export"] },
-  { key: "settings", label: "Settings", actions: ["view", "edit", "manage"] },
-  { key: "roles", label: "Roles & Permissions", actions: ["view", "create", "edit", "delete", "manage"] },
-];
 
 const STORAGE_KEY = "worksuite_role_permission_overrides";
 
@@ -55,10 +31,6 @@ function buildInitialPermissions() {
     accumulator[role] = stored[role] || rolePermissions[role];
     return accumulator;
   }, {} as Record<EditableRole, PermissionKey[]>);
-}
-
-function permissionKey(moduleKey: string, action: PermissionAction): PermissionKey {
-  return `${moduleKey}.${action}` as PermissionKey;
 }
 
 function hasPermission(permissions: PermissionKey[], moduleKey: string, action: PermissionAction) {
@@ -127,7 +99,7 @@ export default function RolePermissionPage() {
           <div>
             <h1 className="text-base font-black uppercase tracking-widest text-gray-800">Roles & Permissions</h1>
             <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              Laravel-style role permission matrix for admin, employee, and client access
+                  Default role permission matrix for admin, employee, and client access
             </p>
           </div>
           <Link href="/settings">
@@ -182,7 +154,7 @@ export default function RolePermissionPage() {
               <div className="flex gap-3">
                 <UserCog className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
                 <p className="text-[11px] font-bold leading-5 text-blue-700">
-                  Admin role remains locked with full company access, matching the Laravel admin panel behavior.
+                  This page controls default role templates. Super Admin can restrict individual company admins from Platform Admins.
                 </p>
               </div>
             </Card>
@@ -217,7 +189,7 @@ export default function RolePermissionPage() {
                 <thead className="border-b border-gray-100 bg-gray-50">
                   <tr>
                     <th className="min-w-56 px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Module</th>
-                    {["view", "create", "edit", "delete", "approve", "export", "manage"].map((action) => (
+                    {permissionActions.map((action) => (
                       <th key={action} className="px-4 py-4 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">
                         {action}
                       </th>
@@ -228,7 +200,7 @@ export default function RolePermissionPage() {
                   {permissionModules.map((moduleItem) => (
                     <tr key={moduleItem.key} className="hover:bg-gray-50/60">
                       <td className="px-6 py-4 text-xs font-black uppercase tracking-widest text-gray-700">{moduleItem.label}</td>
-                      {(["view", "create", "edit", "delete", "approve", "export", "manage"] as PermissionAction[]).map((action) => {
+                      {permissionActions.map((action) => {
                         const allowedAction = moduleItem.actions.includes(action);
                         const checked = hasPermission(activePermissions, moduleItem.key, action);
                         return (

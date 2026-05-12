@@ -127,7 +127,7 @@ export default function SuperAdminSettingsPage() {
                     {activeTab === 'auth' && (
                         <div className="space-y-8">
                             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs font-bold leading-relaxed text-blue-700">
-                                Super admins are platform-level users. They can manage companies, packages, subscriptions, and global settings. They should not belong to a company workspace.
+                                Super admins are internal system owners. They can manage company or branch records, admins, permissions, and global settings. They should not be treated as regular employee workspace users.
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">

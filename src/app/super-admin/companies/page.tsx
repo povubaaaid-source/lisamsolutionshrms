@@ -28,8 +28,6 @@ type Company = {
   name?: string;
   company_name?: string;
   email?: string;
-  package?: string;
-  package_type?: string;
   status?: string;
   lastLogin?: string;
 };
@@ -40,15 +38,13 @@ export default function CompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [impersonatingCompanyId, setImpersonatingCompanyId] = useState<number | string | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [packageFilter, setPackageFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [deletingCompanyId, setDeletingCompanyId] = useState<number | string | null>(null);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [companyForm, setCompanyForm] = useState({
     name: "",
     email: "",
-    package: "",
-    package_type: "monthly",
     status: "active",
   });
 
@@ -72,9 +68,10 @@ export default function CompaniesPage() {
   }, []);
 
   const filteredCompanies = companies.filter((company) => {
-    const packageMatch = packageFilter === "all" || company.package?.toLowerCase() === packageFilter;
-    const typeMatch = typeFilter === "all" || company.package_type === typeFilter;
-    return packageMatch && typeMatch;
+    const query = search.trim().toLowerCase();
+    const searchMatch = !query || `${company.company_name || company.name || ""} ${company.email || ""}`.toLowerCase().includes(query);
+    const statusMatch = statusFilter === "all" || company.status === statusFilter;
+    return searchMatch && statusMatch;
   });
 
   const handleDelete = async () => {
@@ -111,8 +108,6 @@ export default function CompaniesPage() {
     setCompanyForm({
       name: company.company_name || company.name || "",
       email: company.email || "",
-      package: company.package || "",
-      package_type: company.package_type || "monthly",
       status: company.status || "active",
     });
   };
@@ -131,7 +126,7 @@ export default function CompaniesPage() {
       setCompanies((prev) =>
         prev.map((company) =>
           company.id === editingCompany.id
-            ? { ...company, name: companyForm.name, company_name: companyForm.name, email: companyForm.email, package: companyForm.package, package_type: companyForm.package_type, status: companyForm.status }
+            ? { ...company, name: companyForm.name, company_name: companyForm.name, email: companyForm.email, status: companyForm.status }
             : company
         )
       );
@@ -148,9 +143,9 @@ export default function CompaniesPage() {
             <div className="col-lg-6 col-md-6 col-sm-4 col-xs-12">
                 <h4 className="page-title m-0">
                     <Shield className="h-5 w-5 mr-2 inline-block text-primary" /> 
-                    Manage Companies
+                    Company / Branches
                     <span className="text-info border-l border-[#eee] ml-2 pl-2">{companies.length}</span>
-                    <span className="text-[10px] text-gray-400 ml-1 uppercase">Total Companies</span>
+                    <span className="text-[10px] text-gray-400 ml-1 uppercase">Total Records</span>
                 </h4>
             </div>
             <div className="col-lg-6 col-sm-8 col-md-6 col-xs-12 flex justify-end space-x-2">
@@ -160,7 +155,7 @@ export default function CompaniesPage() {
                 <Link href="/super-admin/companies/create">
                   <PermissionGate permission="company.create">
                     <Button className="btn-success btn-outline btn-sm">
-                        Add Company <Plus className="h-4 w-4 ml-1 inline-block" />
+                        Add Company / Branch <Plus className="h-4 w-4 ml-1 inline-block" />
                     </Button>
                   </PermissionGate>
                 </Link>
@@ -171,28 +166,24 @@ export default function CompaniesPage() {
         <div className="white-box">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                 <div>
-                    <label className="block text-[10px] text-gray-400 uppercase mb-1">Package</label>
-                    <select 
-                        value={packageFilter}
-                        onChange={(e) => setPackageFilter(e.target.value)}
+                    <label className="block text-[10px] text-gray-400 uppercase mb-1">Search</label>
+                    <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
                         className="form-control"
-                    >
-                        <option value="all">All Packages</option>
-                        <option value="enterprise">Enterprise</option>
-                        <option value="professional">Professional</option>
-                        <option value="basic">Basic</option>
-                    </select>
+                        placeholder="Name or email"
+                    />
                 </div>
                 <div>
-                    <label className="block text-[10px] text-gray-400 uppercase mb-1">Package Type</label>
+                    <label className="block text-[10px] text-gray-400 uppercase mb-1">Status</label>
                     <select 
-                        value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value)}
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
                         className="form-control"
                     >
-                        <option value="all">All Types</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="annual">Annual</option>
+                        <option value="all">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
                     </select>
                 </div>
                 <div className="flex space-x-2">
@@ -201,8 +192,8 @@ export default function CompaniesPage() {
                     </Button>
                     <Button
                       onClick={() => {
-                        setPackageFilter("all");
-                        setTypeFilter("all");
+                        setSearch("");
+                        setStatusFilter("all");
                       }}
                       className="btn-inverse btn-sm flex-1"
                     >
@@ -221,7 +212,6 @@ export default function CompaniesPage() {
                             <th className="w-16">#</th>
                             <th>Name</th>
                             <th>Email</th>
-                            <th>Package</th>
                             <th>Status</th>
                             <th>Last Activity</th>
                             <th className="text-right">Action</th>
@@ -233,9 +223,6 @@ export default function CompaniesPage() {
                                 <td>{index + 1}</td>
                                 <td>{company.company_name || company.name}</td>
                                 <td>{company.email}</td>
-                                <td>
-                                    <span className="label label-info">{company.package}</span>
-                                </td>
                                 <td>
                                     <span className={`label ${company.status === 'active' ? 'label-success' : 'label-danger'}`}>
                                         {company.status}
@@ -265,8 +252,8 @@ export default function CompaniesPage() {
                         ))}
                         {!loading && filteredCompanies.length === 0 && (
                             <tr>
-                                <td colSpan={7} className="py-16 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
-                                    No companies match this filter
+                                <td colSpan={6} className="py-16 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                    No company or branch records match this filter
                                 </td>
                             </tr>
                         )}
@@ -275,7 +262,7 @@ export default function CompaniesPage() {
             </div>
             {loading && (
               <div className="p-8 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
-                Loading companies...
+                Loading company / branch records...
               </div>
             )}
         </div>
@@ -293,7 +280,7 @@ export default function CompaniesPage() {
             <AlertTriangle className="h-8 w-8" />
           </div>
           <p className="mb-8 text-xs font-bold leading-relaxed text-gray-500">
-            This removes the company from the frontend mock store and matches the future PHP delete flow.
+            This removes the company or branch from the frontend mock store and matches the future PHP delete flow.
           </p>
           <div className="flex gap-3">
             <Button onClick={() => setDeletingCompanyId(null)} className="btn-default flex-1">Cancel</Button>
@@ -311,27 +298,12 @@ export default function CompaniesPage() {
         <form onSubmit={handleCompanyUpdate} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Company Name</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Company / Branch Name</label>
               <input required value={companyForm.name} onChange={(event) => setCompanyForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Email</label>
               <input required type="email" value={companyForm.email} onChange={(event) => setCompanyForm((prev) => ({ ...prev, email: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Package</label>
-              <select value={companyForm.package} onChange={(event) => setCompanyForm((prev) => ({ ...prev, package: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold">
-                <option value="basic">Basic</option>
-                <option value="professional">Professional</option>
-                <option value="enterprise">Enterprise</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Package Type</label>
-              <select value={companyForm.package_type} onChange={(event) => setCompanyForm((prev) => ({ ...prev, package_type: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold">
-                <option value="monthly">Monthly</option>
-                <option value="annual">Annual</option>
-              </select>
             </div>
             <div className="space-y-1.5 md:col-span-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Status</label>
@@ -343,7 +315,7 @@ export default function CompaniesPage() {
           </div>
           <div className="flex gap-3 border-t border-gray-100 pt-5">
             <Button type="button" onClick={() => setEditingCompany(null)} className="btn-default flex-1">Cancel</Button>
-            <Button type="submit" className="btn-success flex-1"><Save className="h-4 w-4 mr-2" /> Save Company</Button>
+            <Button type="submit" className="btn-success flex-1"><Save className="h-4 w-4 mr-2" /> Save Record</Button>
           </div>
         </form>
       </Modal>

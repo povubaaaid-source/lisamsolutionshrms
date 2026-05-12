@@ -1,9 +1,12 @@
 export type ApiResource =
   | "account-setup"
+  | "admins"
   | "attendance"
   | "attendance-settings"
   | "billing"
   | "clients"
+  | "chat-conversations"
+  | "chat-messages"
   | "companies"
   | "contacts"
   | "contracts"
@@ -24,16 +27,26 @@ export type ApiResource =
   | "leaves"
   | "notices"
   | "payments"
+  | "payroll"
+  | "payroll-cycles"
+  | "payroll-settings"
   | "products"
   | "projects"
   | "proposals"
   | "reports"
   | "role-permission"
   | "settings"
+  | "salary-components"
+  | "salary-groups"
+  | "salary-payment-methods"
+  | "salary-tds"
   | "shift-types"
   | "tasks"
   | "tickets"
   | "time-logs"
+  | "employee-salaries"
+  | "employee-salary-groups"
+  | "employee-payroll-cycles"
   | "user-activities";
 
 export type ApiEnvelope<T> = {
@@ -60,7 +73,10 @@ export type ApiListQuery = {
 };
 
 const singularResourceMap: Record<string, string> = {
+  admin: "admins",
   client: "clients",
+  "chat-conversation": "chat-conversations",
+  "chat-message": "chat-messages",
   "client-category": "client-categories",
   contact: "contacts",
   contract: "contracts",
@@ -90,11 +106,18 @@ const singularResourceMap: Record<string, string> = {
   "leave-quota": "leave-quotas",
   notice: "notices",
   payment: "payments",
+  payroll: "payroll",
+  "payroll-cycle": "payroll-cycles",
+  "payroll-setting": "payroll-settings",
   product: "products",
   project: "projects",
   "project-category": "project-categories",
   proposal: "proposals",
   "role-permission": "role-permission",
+  "salary-component": "salary-components",
+  "salary-group": "salary-groups",
+  "salary-payment-method": "salary-payment-methods",
+  "salary-tds": "salary-tds",
   "shift-type": "shift-types",
   task: "tasks",
   "task-category": "task-categories",
@@ -103,6 +126,9 @@ const singularResourceMap: Record<string, string> = {
   team: "teams",
   ticket: "tickets",
   "time-log": "time-logs",
+  "employee-salary": "employee-salaries",
+  "employee-salary-group": "employee-salary-groups",
+  "employee-payroll-cycle": "employee-payroll-cycles",
   "user-activity": "user-activities",
 };
 
@@ -111,8 +137,21 @@ const nestedRouteMap: Record<string, string> = {
   "billing/data": "billing/summary",
   "billing/select-package": "billing/package-selections",
   "billing/offline-payment-submit": "billing/offline-payments",
-  "salary-components": "payroll/salary-components",
-  "salary-groups": "payroll/salary-groups",
+  "payroll/generate": "payroll/generate",
+  "payroll/updateStatus": "payroll/update-status",
+  "payroll/update-status": "payroll/update-status",
+  "payroll/cycle-data": "payroll/cycle-data",
+  "salary-components": "salary-components",
+  "salary-groups": "salary-groups",
+  "salary-tds": "salary-tds",
+  "salary-tds/status": "payroll-settings",
+  "payment-methods": "salary-payment-methods",
+  "salary-payment-methods": "salary-payment-methods",
+  "employee-salary": "employee-salaries",
+  "employee-salary/payroll-cycle": "employee-payroll-cycles",
+  "employee-salary/payroll-status": "employee-salaries/status",
+  "employee-salary-groups": "employee-salary-groups",
+  "payroll-setting": "payroll-settings",
 };
 
 const stripSlashes = (value: string) => value.replace(/^\/+|\/+$/g, "");

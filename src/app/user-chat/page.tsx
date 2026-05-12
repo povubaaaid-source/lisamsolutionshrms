@@ -1,694 +1,1212 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Button from "@/components/ui/Button";
-import { 
-  Search, Send, Paperclip, MoreVertical, Circle, Phone, Video, 
-  SearchIcon, Plus, X, Users, Image as ImageIcon, FileText, 
-  Check, CheckCheck, Reply, Edit2, Trash, Smile, Pin, Menu, 
-  ArrowLeft, Download, ThumbsUp, Heart, Laugh 
+import Modal from "@/components/ui/Modal";
+import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
+import { makeLocalUploadFiles } from "@/lib/local-upload";
+import {
+  Archive,
+  ArrowLeft,
+  Camera,
+  Check,
+  CheckCheck,
+  Download,
+  FileText,
+  Heart,
+  Image as ImageIcon,
+  Info,
+  Laugh,
+  Lock,
+  MessageSquare,
+  MoreVertical,
+  Paperclip,
+  Pin,
+  Plus,
+  Reply,
+  Search,
+  Send,
+  Shield,
+  Smile,
+  Trash2,
+  UserMinus,
+  UserPlus,
+  Users,
+  X,
 } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
 
-// --- Types ---
-type Reaction = { emoji: string; count: number; userReacted: boolean };
+type MemberType = "admin" | "employee" | "client";
 
-type MessageType = {
-  id: string | number;
-  text: string;
-  sender: string;
-  time: string;
-  chatId: string | number;
-  file?: { name: string; url: string; type: string; size?: string; progress?: number };
-  status?: 'sending' | 'sent' | 'delivered' | 'seen';
-  replyTo?: MessageType;
-  reactions?: Reaction[];
-  isPinned?: boolean;
-  isDeleted?: boolean;
-  isEdited?: boolean;
-};
-
-type ChatType = {
-  id: string | number;
-  type: "user" | "group";
+type ChatMember = {
+  key: string;
+  id: number | string;
+  type: MemberType;
   name: string;
   role?: string;
-  status?: string;
-  lastMsg: string;
-  unreadCount?: number;
-  members?: string[];
   avatar?: string;
+  status?: "online" | "away" | "offline";
 };
 
-// --- Mock Data ---
-const initialContacts: ChatType[] = [
-  { id: 1, type: "user", name: "Alice Smith", role: "Developer", status: "online", lastMsg: "The dashboard looks great!", unreadCount: 2 },
-  { id: 2, type: "user", name: "Bob Johnson", role: "Project Manager", status: "offline", lastMsg: "Let's meet at 2 PM.", unreadCount: 0 },
-  { id: 3, type: "user", name: "Carol White", role: "Designer", status: "online", lastMsg: "Sent the final assets.", unreadCount: 1 },
-  { id: 4, type: "user", name: "David Lee", role: "Backend", status: "away", lastMsg: "API is ready for testing.", unreadCount: 0 },
-  { id: "g1", type: "group", name: "Frontend Team", lastMsg: "Please check the new PR", members: ["Alice Smith", "Bob Johnson"], unreadCount: 0 },
-];
+type ChatAttachment = {
+  id: string;
+  name: string;
+  url: string;
+  type: "image" | "file";
+  size_label?: string;
+  mime_type?: string;
+};
 
-const initialMessages: MessageType[] = [
-  { id: 1, text: "Hey Alice, how's the progress on the dashboard?", sender: "me", time: "10:00 AM", chatId: 1, status: "seen" },
-  { id: 2, text: "Hey! It's going well. I'm just finishing the charts.", sender: "Alice Smith", time: "10:02 AM", chatId: 1, status: "seen", reactions: [{ emoji: "👍", count: 1, userReacted: true }] },
-  { id: 3, text: "The dashboard looks great!", sender: "Alice Smith", time: "10:02 AM", chatId: 1, status: "seen", isPinned: true },
-  { id: 4, text: "Welcome to the Frontend Team group!", sender: "me", time: "09:00 AM", chatId: "g1", status: "seen" },
-  { id: 5, text: "Thanks!", sender: "Alice Smith", time: "09:05 AM", chatId: "g1", status: "seen" },
-];
+type ChatReaction = {
+  key: "like" | "heart" | "laugh";
+  count: number;
+  user_keys: string[];
+};
+
+type ChatMessage = {
+  id: string | number;
+  conversation_id: string | number;
+  sender_key: string;
+  sender_name: string;
+  body: string;
+  attachments?: ChatAttachment[];
+  status_by?: Record<string, "sending" | "sent" | "delivered" | "seen">;
+  reactions?: ChatReaction[];
+  reply_to_id?: string | number | null;
+  edited_at?: string | null;
+  deleted_at?: string | null;
+  created_at: string;
+};
+
+type GroupSettings = {
+  only_admins_can_send?: boolean;
+  only_admins_can_edit_info?: boolean;
+  allow_member_uploads?: boolean;
+  disappearing_messages_days?: number;
+};
+
+type ChatConversation = {
+  id: string | number;
+  type: "direct" | "group";
+  name: string;
+  description?: string;
+  avatar?: string;
+  participant_keys: string[];
+  participants: ChatMember[];
+  admin_keys?: string[];
+  created_by?: string;
+  settings?: GroupSettings;
+  last_message?: string;
+  last_message_at?: string;
+  unread_by?: string[];
+  muted_by?: string[];
+  archived_by?: string[];
+  pinned_message_id?: string | number | null;
+  created_at?: string;
+};
+
+const roleLabel: Record<MemberType, string> = {
+  admin: "Admin",
+  employee: "Employee",
+  client: "Client",
+};
+
+const reactionMeta = {
+  like: { label: "Like", icon: Check },
+  heart: { label: "Heart", icon: Heart },
+  laugh: { label: "Laugh", icon: Laugh },
+} as const;
+
+const formatTime = (dateValue?: string) => {
+  if (!dateValue) return "";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+const asList = <T,>(payload: unknown): T[] => {
+  const root = payload as { data?: unknown } | null;
+  const data = root && typeof root === "object" && "data" in root ? root.data : payload;
+  return Array.isArray(data) ? (data as T[]) : [];
+};
+
+const memberKeyFor = (type: MemberType, id: number | string) => `${type}:${id}`;
+
+const getCurrentUserKey = (role?: string, id?: number | string) => {
+  const safeId = id || 1;
+  if (role === "client") return memberKeyFor("client", safeId);
+  if (role === "employee") return memberKeyFor("employee", safeId);
+  return memberKeyFor("admin", safeId);
+};
+
+const getDirectConversationName = (conversation: ChatConversation, currentUserKey: string) =>
+  conversation.participants.find((member) => member.key !== currentUserKey)?.name || conversation.name;
+
+const getDirectAvatar = (conversation: ChatConversation, currentUserKey: string) =>
+  conversation.participants.find((member) => member.key !== currentUserKey)?.avatar || conversation.avatar || "";
+
+const getMessageStatus = (message: ChatMessage, currentUserKey: string) => message.status_by?.[currentUserKey] || "sent";
 
 export default function ChatPage() {
-  const [contacts, setContacts] = useState<ChatType[]>(initialContacts);
-  const [activeContact, setActiveContact] = useState<ChatType | null>(null);
-  const [messages, setMessages] = useState<MessageType[]>(initialMessages);
-  
-  // UI States
-  const [input, setInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [chatSearchQuery, setChatSearchQuery] = useState("");
-  const [showChatSearch, setShowChatSearch] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'groups'>('all');
-  const [showSidebar, setShowSidebar] = useState(true);
-  
-  // Modal States
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-
-  // Message Action States
-  const [replyingTo, setReplyingTo] = useState<MessageType | null>(null);
-  const [editingMsg, setEditingMsg] = useState<MessageType | null>(null);
-  const [isTyping, setIsTyping] = useState(false);
-  const [hoveredMsgId, setHoveredMsgId] = useState<string | number | null>(null);
-
+  const { user } = useAuth();
+  const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const groupAvatarInputRef = useRef<HTMLInputElement>(null);
+  const settingsAvatarInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // --- Derived State ---
-  const filteredContacts = contacts.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-    if (activeTab === 'unread') return (c.unreadCount || 0) > 0;
-    if (activeTab === 'groups') return c.type === 'group';
-    return true;
-  });
+  const currentUserKey = useMemo(() => getCurrentUserKey(user?.role, user?.id), [user?.id, user?.role]);
+  const currentUserName = user?.name || "Current User";
+  const isAdminRole = user?.role === "admin";
 
-  const activeMessages = activeContact 
-    ? messages.filter(m => m.chatId === activeContact.id && (!chatSearchQuery || m.text.toLowerCase().includes(chatSearchQuery.toLowerCase())))
-    : [];
+  const [loading, setLoading] = useState(true);
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [directory, setDirectory] = useState<ChatMember[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"all" | "unread" | "groups">("all");
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [draft, setDraft] = useState("");
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showGroupSettings, setShowGroupSettings] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDescription, setNewGroupDescription] = useState("");
+  const [newGroupAvatar, setNewGroupAvatar] = useState("");
+  const [selectedMemberKeys, setSelectedMemberKeys] = useState<string[]>([]);
 
-  const pinnedMessages = activeMessages.filter(m => m.isPinned);
+  const activeConversation = useMemo(
+    () => conversations.find((conversation) => conversation.id === activeConversationId) || null,
+    [activeConversationId, conversations],
+  );
 
-  // --- Effects ---
+  const activeMessages = useMemo(() => {
+    const query = chatSearchQuery.trim().toLowerCase();
+    return messages
+      .filter((message) => message.conversation_id === activeConversation?.id)
+      .filter((message) => !query || `${message.body} ${message.attachments?.map((attachment) => attachment.name).join(" ")}`.toLowerCase().includes(query))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }, [activeConversation?.id, chatSearchQuery, messages]);
+
+  const canManageActiveGroup = useMemo(() => {
+    if (!activeConversation || activeConversation.type !== "group") return false;
+    return isAdminRole || Boolean(activeConversation.admin_keys?.includes(currentUserKey));
+  }, [activeConversation, currentUserKey, isAdminRole]);
+
+  const canEditActiveGroupInfo = useMemo(() => {
+    if (!activeConversation || activeConversation.type !== "group") return false;
+    if (canManageActiveGroup) return true;
+    return !activeConversation.settings?.only_admins_can_edit_info;
+  }, [activeConversation, canManageActiveGroup]);
+
+  const canSendInActiveConversation = useMemo(() => {
+    if (!activeConversation) return false;
+    if (activeConversation.archived_by?.includes(currentUserKey)) return false;
+    if (activeConversation.type === "group" && activeConversation.settings?.only_admins_can_send && !canManageActiveGroup) return false;
+    return activeConversation.participant_keys.includes(currentUserKey);
+  }, [activeConversation, canManageActiveGroup, currentUserKey]);
+
+  const canUploadInActiveConversation = useMemo(() => {
+    if (!activeConversation) return false;
+    if (activeConversation.type === "group" && activeConversation.settings?.allow_member_uploads === false && !canManageActiveGroup) return false;
+    return canSendInActiveConversation;
+  }, [activeConversation, canManageActiveGroup, canSendInActiveConversation]);
+
+  const visibleConversations = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return conversations
+      .filter((conversation) => conversation.participant_keys.includes(currentUserKey))
+      .filter((conversation) => !conversation.archived_by?.includes(currentUserKey))
+      .filter((conversation) => {
+        const displayName = conversation.type === "direct" ? getDirectConversationName(conversation, currentUserKey) : conversation.name;
+        if (query && !displayName.toLowerCase().includes(query)) return false;
+        if (activeTab === "unread") return Boolean(conversation.unread_by?.includes(currentUserKey));
+        if (activeTab === "groups") return conversation.type === "group";
+        return true;
+      })
+      .sort((a, b) => String(b.last_message_at || b.created_at || "").localeCompare(String(a.last_message_at || a.created_at || "")));
+  }, [activeTab, conversations, currentUserKey, searchQuery]);
+
+  const activePinnedMessage = useMemo(
+    () => activeMessages.find((message) => message.id === activeConversation?.pinned_message_id) || null,
+    [activeConversation?.pinned_message_id, activeMessages],
+  );
+
   useEffect(() => {
-    // Scroll to bottom on new message
+    const loadChat = async () => {
+      setLoading(true);
+      try {
+        const [conversationRes, messageRes, employeeRes, clientRes] = await Promise.all([
+          api.get("/chat-conversations"),
+          api.get("/chat-messages"),
+          api.get("/employees"),
+          api.get("/clients"),
+        ]);
+
+        const employeeMembers = asList<Record<string, unknown>>(employeeRes.data).map((employee) => {
+          const id = employee.id as number | string;
+          const detail = employee.employee_detail as { designation?: { name?: string } } | undefined;
+          const type: MemberType = employee.role === "admin" ? "admin" : "employee";
+          return {
+            key: memberKeyFor(type, id),
+            id,
+            type,
+            name: String(employee.name || employee.email || `Employee ${id}`),
+            role: detail?.designation?.name || roleLabel[type],
+            avatar: String(employee.avatar || employee.image || ""),
+            status: String(employee.status || "online") === "active" ? "online" : "offline",
+          } as ChatMember;
+        });
+
+        const clientMembers = asList<Record<string, unknown>>(clientRes.data).map((client) => ({
+          key: memberKeyFor("client", client.id as number | string),
+          id: client.id as number | string,
+          type: "client" as const,
+          name: String(client.name || client.email || `Client ${client.id}`),
+          role: String((client.client_detail as { company_name?: string } | undefined)?.company_name || "Client"),
+          avatar: String(client.avatar || client.image || ""),
+          status: "online" as const,
+        }));
+
+        const currentMember: ChatMember = {
+          key: currentUserKey,
+          id: user?.id || 1,
+          type: user?.role === "client" ? "client" : user?.role === "employee" ? "employee" : "admin",
+          name: currentUserName,
+          role: roleLabel[user?.role === "client" ? "client" : user?.role === "employee" ? "employee" : "admin"],
+          avatar: "",
+          status: "online",
+        };
+
+        const members = [currentMember, ...employeeMembers, ...clientMembers].filter(
+          (member, index, list) => list.findIndex((item) => item.key === member.key) === index,
+        );
+
+        setDirectory(members);
+        setConversations(asList<ChatConversation>(conversationRes.data));
+        setMessages(asList<ChatMessage>(messageRes.data));
+      } catch (error) {
+        console.error("Chat load error", error);
+        showToast("Chat data could not be loaded.", "error");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadChat();
+  }, [currentUserKey, currentUserName, showToast, user?.id, user?.role]);
+
+  useEffect(() => {
+    if (!activeConversationId && visibleConversations[0]) {
+      setActiveConversationId(visibleConversations[0].id);
+    }
+  }, [activeConversationId, visibleConversations]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeMessages.length]);
 
-  useEffect(() => {
-    // If mobile, auto-hide sidebar when contact selected
-    const isMobile = window.innerWidth < 768;
-    if (isMobile && activeContact) {
-      setShowSidebar(false);
+  const persistConversation = async (conversation: ChatConversation) => {
+    setConversations((current) => current.map((item) => (item.id === conversation.id ? conversation : item)));
+    try {
+      await api.put(`/chat-conversations/${conversation.id}`, conversation);
+    } catch {
+      showToast("Chat settings were saved locally, but backend sync failed.", "info");
     }
-  }, [activeContact]);
+  };
 
-  // --- Handlers ---
-  const handleSend = () => {
-    if (!input.trim() && !editingMsg) return;
+  const addMessage = async (message: ChatMessage, conversationUpdate?: Partial<ChatConversation>) => {
+    setMessages((current) => [...current, message]);
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === message.conversation_id
+          ? {
+              ...conversation,
+              ...conversationUpdate,
+              last_message: message.attachments?.length ? message.attachments[0].name : message.body,
+              last_message_at: message.created_at,
+              unread_by: conversation.participant_keys.filter((key) => key !== currentUserKey),
+            }
+          : conversation,
+      ),
+    );
 
-    if (editingMsg) {
-      setMessages(msgs => msgs.map(m => m.id === editingMsg.id ? { ...m, text: input, isEdited: true } : m));
-      setEditingMsg(null);
-      setInput("");
+    try {
+      await api.post("/chat-messages", message);
+    } catch {
+      showToast("Message saved locally, but backend sync failed.", "info");
+    }
+  };
+
+  const handleSelectConversation = async (conversation: ChatConversation) => {
+    setActiveConversationId(conversation.id);
+    setShowSidebar(false);
+    if (conversation.unread_by?.includes(currentUserKey)) {
+      await persistConversation({
+        ...conversation,
+        unread_by: conversation.unread_by.filter((key) => key !== currentUserKey),
+      });
+    }
+  };
+
+  const handleSend = async () => {
+    if (!activeConversation || !canSendInActiveConversation) return;
+    if (!draft.trim() && !editingMessage) return;
+
+    if (editingMessage) {
+      const updated = {
+        ...editingMessage,
+        body: draft.trim(),
+        edited_at: new Date().toISOString(),
+      };
+      setMessages((current) => current.map((message) => (message.id === editingMessage.id ? updated : message)));
+      setEditingMessage(null);
+      setDraft("");
+      try {
+        await api.put(`/chat-messages/${editingMessage.id}`, updated);
+      } catch {
+        showToast("Edit saved locally, but backend sync failed.", "info");
+      }
       return;
     }
 
-    if (!activeContact) return;
-
-    const newMsg: MessageType = {
-      id: Date.now(),
-      text: input,
-      sender: "me",
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      chatId: activeContact.id,
-      status: "sending",
-      replyTo: replyingTo || undefined
+    const now = new Date().toISOString();
+    const message: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      conversation_id: activeConversation.id,
+      sender_key: currentUserKey,
+      sender_name: currentUserName,
+      body: draft.trim(),
+      attachments: [],
+      reply_to_id: replyingTo?.id || null,
+      status_by: Object.fromEntries(activeConversation.participant_keys.map((key) => [key, key === currentUserKey ? "seen" : "delivered"])),
+      reactions: [],
+      created_at: now,
     };
 
-    setMessages([...messages, newMsg]);
+    setDraft("");
     setReplyingTo(null);
-    setInput("");
-    
-    // Update last message
-    setContacts(contacts.map(c => c.id === activeContact.id ? { ...c, lastMsg: input } : c));
+    await addMessage(message);
+  };
 
-    // Simulate sending flow
-    setTimeout(() => {
-      setMessages(msgs => msgs.map(m => m.id === newMsg.id ? { ...m, status: "sent" } : m));
-      setTimeout(() => {
-        setMessages(msgs => msgs.map(m => m.id === newMsg.id ? { ...m, status: "delivered" } : m));
-      }, 1000);
-    }, 800);
+  const handleAttachmentUpload = async (files: FileList | null) => {
+    if (!activeConversation || !files?.length) return;
+    if (!canUploadInActiveConversation) {
+      showToast("Only group admins can upload files in this group.", "error");
+      return;
+    }
 
-    // Simulate reply
-    if (activeContact.type === 'user') {
-      setTimeout(() => setIsTyping(true), 2000);
-      setTimeout(() => {
-        setIsTyping(false);
-        const replyMsg: MessageType = {
-          id: Date.now(),
-          text: "That sounds good to me!",
-          sender: activeContact.name,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          chatId: activeContact.id,
-          status: "seen"
-        };
-        setMessages(prev => [...prev, replyMsg]);
-        setContacts(prev => prev.map(c => c.id === activeContact.id ? { ...c, lastMsg: replyMsg.text } : c));
-        
-        // Mark ours as seen
-        setMessages(msgs => msgs.map(m => m.id === newMsg.id ? { ...m, status: "seen" } : m));
-      }, 5000);
+    const uploads = await makeLocalUploadFiles(files, currentUserName);
+    const attachments = uploads.map((file) => ({
+      id: file.id,
+      name: file.name,
+      url: file.url,
+      type: file.type,
+      size_label: file.size_label,
+      mime_type: file.mime_type,
+    }));
+    const now = new Date().toISOString();
+    const message: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      conversation_id: activeConversation.id,
+      sender_key: currentUserKey,
+      sender_name: currentUserName,
+      body: draft.trim() || attachments.map((attachment) => attachment.name).join(", "),
+      attachments,
+      reply_to_id: replyingTo?.id || null,
+      status_by: Object.fromEntries(activeConversation.participant_keys.map((key) => [key, key === currentUserKey ? "seen" : "delivered"])),
+      reactions: [],
+      created_at: now,
+    };
+
+    setDraft("");
+    setReplyingTo(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    await addMessage(message);
+  };
+
+  const handleDeleteMessage = async (message: ChatMessage) => {
+    if (message.sender_key !== currentUserKey && !canManageActiveGroup) return;
+    const updated = { ...message, body: "This message was deleted.", attachments: [], deleted_at: new Date().toISOString() };
+    setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
+    try {
+      await api.put(`/chat-messages/${message.id}`, updated);
+    } catch {
+      showToast("Message deleted locally, but backend sync failed.", "info");
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeContact) return;
+  const toggleReaction = async (message: ChatMessage, reactionKey: ChatReaction["key"]) => {
+    const reactions = message.reactions || [];
+    const existing = reactions.find((reaction) => reaction.key === reactionKey);
+    const nextReactions = existing
+      ? reactions
+          .map((reaction) =>
+            reaction.key === reactionKey
+              ? {
+                  ...reaction,
+                  user_keys: reaction.user_keys.includes(currentUserKey)
+                    ? reaction.user_keys.filter((key) => key !== currentUserKey)
+                    : [...reaction.user_keys, currentUserKey],
+                }
+              : reaction,
+          )
+          .map((reaction) => ({ ...reaction, count: reaction.user_keys.length }))
+          .filter((reaction) => reaction.count > 0)
+      : [...reactions, { key: reactionKey, count: 1, user_keys: [currentUserKey] }];
 
-    const fileUrl = URL.createObjectURL(file);
-    const fileType = file.type.startsWith('image/') ? 'image' : 'file';
-    const size = (file.size / 1024 / 1024).toFixed(2) + ' MB';
-
-    const newMsg: MessageType = {
-      id: Date.now(),
-      text: file.name,
-      sender: "me",
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      chatId: activeContact.id,
-      status: "sending",
-      file: { name: file.name, url: fileUrl, type: fileType, size, progress: 0 }
-    };
-
-    setMessages([...messages, newMsg]);
-    
-    // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 20;
-      setMessages(msgs => msgs.map(m => 
-        m.id === newMsg.id ? { ...m, file: { ...m.file!, progress } } : m
-      ));
-      if (progress >= 100) {
-        clearInterval(interval);
-        setMessages(msgs => msgs.map(m => 
-          m.id === newMsg.id ? { ...m, status: "sent", file: { ...m.file!, progress: undefined } } : m
-        ));
-      }
-    }, 500);
-
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    const updated = { ...message, reactions: nextReactions };
+    setMessages((current) => current.map((item) => (item.id === message.id ? updated : item)));
+    try {
+      await api.put(`/chat-messages/${message.id}`, updated);
+    } catch {
+      showToast("Reaction saved locally, but backend sync failed.", "info");
+    }
   };
 
-  const handleDelete = (id: string | number) => {
-    setMessages(msgs => msgs.map(m => m.id === id ? { ...m, isDeleted: true, text: "This message was deleted", file: undefined } : m));
+  const handleGroupAvatarUpload = async (files: FileList | null, target: "create" | "settings") => {
+    const [upload] = await makeLocalUploadFiles(files, currentUserName);
+    if (!upload) return;
+    if (target === "create") {
+      setNewGroupAvatar(upload.url);
+      return;
+    }
+    if (activeConversation) {
+      await persistConversation({ ...activeConversation, avatar: upload.url });
+    }
   };
 
-  const toggleReaction = (msgId: string | number, emoji: string) => {
-    setMessages(msgs => msgs.map(m => {
-      if (m.id !== msgId) return m;
-      const reactions = m.reactions || [];
-      const existing = reactions.find(r => r.emoji === emoji);
-      
-      let newReactions;
-      if (existing) {
-        if (existing.userReacted) {
-          newReactions = reactions.map(r => r.emoji === emoji ? { ...r, count: r.count - 1, userReacted: false } : r).filter(r => r.count > 0);
-        } else {
-          newReactions = reactions.map(r => r.emoji === emoji ? { ...r, count: r.count + 1, userReacted: true } : r);
-        }
-      } else {
-        newReactions = [...reactions, { emoji, count: 1, userReacted: true }];
-      }
-      return { ...m, reactions: newReactions };
-    }));
-  };
+  const handleCreateGroup = async () => {
+    if (!isAdminRole) {
+      showToast("Only admins can create chat groups.", "error");
+      return;
+    }
+    if (!newGroupName.trim() || selectedMemberKeys.length === 0) {
+      showToast("Add a group name and at least one member.", "error");
+      return;
+    }
 
-  const handleCreateGroup = () => {
-    if (!newGroupName.trim() || selectedMembers.length === 0) return;
-    const newGroup: ChatType = {
-      id: `g${Date.now()}`,
+    const currentMember = directory.find((member) => member.key === currentUserKey);
+    const selectedMembers = directory.filter((member) => selectedMemberKeys.includes(member.key));
+    const participants = [currentMember, ...selectedMembers].filter(Boolean) as ChatMember[];
+    const conversation: ChatConversation = {
+      id: `group-${Date.now()}`,
       type: "group",
-      name: newGroupName,
-      members: selectedMembers,
-      lastMsg: "Group created"
+      name: newGroupName.trim(),
+      description: newGroupDescription.trim(),
+      avatar: newGroupAvatar,
+      participant_keys: participants.map((member) => member.key),
+      participants,
+      admin_keys: [currentUserKey],
+      created_by: currentUserKey,
+      settings: {
+        only_admins_can_send: false,
+        only_admins_can_edit_info: true,
+        allow_member_uploads: true,
+        disappearing_messages_days: 0,
+      },
+      last_message: "Group created",
+      last_message_at: new Date().toISOString(),
+      unread_by: participants.map((member) => member.key).filter((key) => key !== currentUserKey),
+      muted_by: [],
+      archived_by: [],
+      created_at: new Date().toISOString(),
     };
-    setContacts([newGroup, ...contacts]);
-    setShowGroupModal(false);
+
+    setConversations((current) => [conversation, ...current]);
+    setActiveConversationId(conversation.id);
+    setShowCreateGroup(false);
     setNewGroupName("");
-    setSelectedMembers([]);
-    setActiveContact(newGroup);
+    setNewGroupDescription("");
+    setNewGroupAvatar("");
+    setSelectedMemberKeys([]);
+
+    try {
+      await api.post("/chat-conversations", conversation);
+    } catch {
+      showToast("Group created locally, but backend sync failed.", "info");
+    }
   };
 
-  const formatFileSize = (bytes?: number) => bytes ? (bytes / 1024 / 1024).toFixed(2) + ' MB' : '';
+  const updateGroupSetting = async (patch: Partial<GroupSettings>) => {
+    if (!activeConversation || activeConversation.type !== "group" || !canEditActiveGroupInfo) return;
+    await persistConversation({
+      ...activeConversation,
+      settings: { ...(activeConversation.settings || {}), ...patch },
+    });
+  };
+
+  const updateGroupInfo = async (name: string, description: string) => {
+    if (!activeConversation || activeConversation.type !== "group" || !canEditActiveGroupInfo) return;
+    await persistConversation({
+      ...activeConversation,
+      name: name.trim() || activeConversation.name,
+      description: description.trim(),
+    });
+    showToast("Group information updated.", "success");
+  };
+
+  const addGroupMember = async (memberKey: string) => {
+    if (!activeConversation || activeConversation.type !== "group" || !canManageActiveGroup) return;
+    const member = directory.find((item) => item.key === memberKey);
+    if (!member || activeConversation.participant_keys.includes(member.key)) return;
+    await persistConversation({
+      ...activeConversation,
+      participant_keys: [...activeConversation.participant_keys, member.key],
+      participants: [...activeConversation.participants, member],
+      unread_by: Array.from(new Set([...(activeConversation.unread_by || []), member.key])),
+    });
+  };
+
+  const removeGroupMember = async (memberKey: string) => {
+    if (!activeConversation || activeConversation.type !== "group" || !canManageActiveGroup) return;
+    if (memberKey === currentUserKey) return;
+    await persistConversation({
+      ...activeConversation,
+      participant_keys: activeConversation.participant_keys.filter((key) => key !== memberKey),
+      participants: activeConversation.participants.filter((member) => member.key !== memberKey),
+      admin_keys: (activeConversation.admin_keys || []).filter((key) => key !== memberKey),
+    });
+  };
+
+  const toggleGroupAdmin = async (memberKey: string) => {
+    if (!activeConversation || activeConversation.type !== "group" || !canManageActiveGroup) return;
+    if (memberKey === activeConversation.created_by) return;
+    const adminKeys = activeConversation.admin_keys || [];
+    await persistConversation({
+      ...activeConversation,
+      admin_keys: adminKeys.includes(memberKey) ? adminKeys.filter((key) => key !== memberKey) : [...adminKeys, memberKey],
+    });
+  };
+
+  const archiveActiveConversation = async () => {
+    if (!activeConversation) return;
+    await persistConversation({
+      ...activeConversation,
+      archived_by: Array.from(new Set([...(activeConversation.archived_by || []), currentUserKey])),
+    });
+    setActiveConversationId(null);
+    setShowGroupSettings(false);
+  };
+
+  const displayName = activeConversation
+    ? activeConversation.type === "direct"
+      ? getDirectConversationName(activeConversation, currentUserKey)
+      : activeConversation.name
+    : "";
 
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-140px)] flex bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden -mx-6 -mt-6">
-         
-         {/* Contacts Sidebar */}
-         <div className={`w-full md:w-80 border-r border-gray-200 flex-col bg-gray-50 ${showSidebar ? 'flex' : 'hidden md:flex'}`}>
-            <div className="p-6 border-b border-gray-200 bg-white">
-               <div className="flex items-center justify-between mb-6">
-                 <h1 className="text-base font-black text-gray-800 uppercase tracking-widest">Chats</h1>
-                 <button 
-                   onClick={() => setShowGroupModal(true)}
-                   className="p-2 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-xl transition-all"
-                   title="New Group"
-                 >
-                   <Plus className="h-4 w-4" />
-                 </button>
-               </div>
-
-               {/* Search */}
-               <div className="relative group mb-4">
-                  <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-gray-300 group-focus-within:text-primary transition-colors" />
-                  <input 
-                    type="text" 
-                    placeholder="Search chats..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm font-semibold focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm"
-                  />
-               </div>
-
-               {/* Tabs */}
-               <div className="flex space-x-2">
-                 {(['all', 'unread', 'groups'] as const).map(t => (
-                   <button
-                     key={t}
-                     onClick={() => setActiveTab(t)}
-                     className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
-                       activeTab === t ? 'bg-primary text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                     }`}
-                   >
-                     {t}
-                   </button>
-                 ))}
-               </div>
-            </div>
-
-            {/* Chat List */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-               {filteredContacts.length === 0 && (
-                 <div className="p-4 text-center text-xs text-gray-400 font-bold">No chats found.</div>
-               )}
-               {filteredContacts.map((c) => (
-                  <div 
-                    key={c.id} 
-                    onClick={() => { setActiveContact(c); if(c.unreadCount) setContacts(contacts.map(x => x.id === c.id ? {...x, unreadCount: 0} : x)); }}
-                    className={`flex items-center space-x-4 p-3 rounded-2xl cursor-pointer transition-all relative ${
-                       activeContact?.id === c.id ? "bg-white shadow-sm ring-1 ring-gray-100" : "hover:bg-white/50"
-                    }`}
-                  >
-                     <div className="relative">
-                        <div className={`h-11 w-11 rounded-2xl flex items-center justify-center font-black text-xs shadow-sm ${c.type === 'group' ? 'bg-indigo-100 text-indigo-600' : 'bg-primary/10 text-primary'}`}>
-                           {c.type === 'group' ? <Users className="h-5 w-5" /> : c.name.charAt(0)}
-                        </div>
-                        {c.type === 'user' && (
-                          <div className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white ${
-                             c.status === "online" ? "bg-green-500" : c.status === "away" ? "bg-orange-500" : "bg-gray-300"
-                          }`} />
-                        )}
-                     </div>
-                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                           <p className="text-sm font-black text-gray-800 truncate">{c.name}</p>
-                        </div>
-                        <p className={`text-xs truncate mt-0.5 ${c.unreadCount ? 'font-bold text-gray-800' : 'font-medium text-gray-400'}`}>
-                          {c.lastMsg}
-                        </p>
-                     </div>
-                     {!!c.unreadCount && c.unreadCount > 0 && (
-                       <div className="h-5 w-5 bg-primary rounded-full flex items-center justify-center text-[9px] font-black text-white absolute right-4">
-                         {c.unreadCount}
-                       </div>
-                     )}
-                  </div>
-               ))}
-            </div>
-         </div>
-
-         {/* Chat Area */}
-         <div className={`flex-1 flex flex-col bg-white relative ${!showSidebar ? 'flex' : 'hidden md:flex'}`}>
-            {activeContact ? (
-              <>
-                {/* Chat Header */}
-                <div className="px-6 md:px-8 py-4 border-b border-gray-200 flex items-center justify-between bg-white/50 backdrop-blur-sm z-10 shadow-sm">
-                   <div className="flex items-center space-x-4">
-                      {/* Mobile back button */}
-                      <button 
-                        onClick={() => setShowSidebar(true)}
-                        className="md:hidden p-2 -ml-2 text-gray-400 hover:text-primary transition-colors"
-                      >
-                        <ArrowLeft className="h-5 w-5" />
-                      </button>
-
-                      <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-black text-xs shadow-lg ${activeContact.type === 'group' ? 'bg-indigo-500 text-white shadow-indigo-500/20' : 'bg-primary text-white shadow-primary/20'}`}>
-                         {activeContact.type === 'group' ? <Users className="h-5 w-5" /> : activeContact.name.charAt(0)}
-                      </div>
-                      <div>
-                         <p className="text-sm font-black text-gray-800 tracking-tight">{activeContact.name}</p>
-                         {activeContact.type === 'user' ? (
-                           <p className="text-[9px] text-green-500 font-black uppercase tracking-widest flex items-center mt-0.5">
-                              <Circle className="h-2 w-2 fill-current mr-1.5" /> Online
-                           </p>
-                         ) : (
-                           <p className="text-[9px] text-gray-400 font-bold tracking-widest mt-0.5 truncate max-w-[200px]">
-                              You, {activeContact.members?.join(", ")}
-                           </p>
-                         )}
-                      </div>
-                   </div>
-                   <div className="flex items-center space-x-1 md:space-x-2">
-                      <button onClick={() => setShowChatSearch(!showChatSearch)} className={`p-2.5 rounded-xl transition-all ${showChatSearch ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:text-primary hover:bg-gray-50'}`}><SearchIcon className="h-5 w-5" /></button>
-                      <button className="hidden md:block p-2.5 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-xl transition-all"><Phone className="h-5 w-5" /></button>
-                      <button className="hidden md:block p-2.5 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-xl transition-all"><Video className="h-5 w-5" /></button>
-                      <button className="p-2.5 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-xl transition-all"><MoreVertical className="h-5 w-5" /></button>
-                   </div>
-                </div>
-
-                {/* In-Chat Search Bar */}
-                {showChatSearch && (
-                  <div className="px-8 py-3 bg-gray-50 border-b border-gray-100 flex items-center">
-                    <Search className="h-4 w-4 text-gray-400 mr-3" />
-                    <input 
-                      type="text" 
-                      placeholder="Search in this chat..." 
-                      value={chatSearchQuery}
-                      onChange={(e) => setChatSearchQuery(e.target.value)}
-                      className="flex-1 bg-transparent border-none text-xs font-bold outline-none"
-                    />
-                    <button onClick={() => {setShowChatSearch(false); setChatSearchQuery("");}}><X className="h-4 w-4 text-gray-400 hover:text-red-500" /></button>
-                  </div>
-                )}
-
-                {/* Pinned Messages */}
-                {pinnedMessages.length > 0 && (
-                  <div className="bg-primary/5 px-8 py-2 border-b border-primary/10 flex items-center cursor-pointer hover:bg-primary/10 transition-colors">
-                    <Pin className="h-4 w-4 text-primary mr-3" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-black text-primary uppercase tracking-widest">Pinned Message</p>
-                      <p className="text-xs text-gray-700 truncate font-medium">{pinnedMessages[0].text}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Messages List */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 bg-gray-50">
-                   {activeMessages.length === 0 && !chatSearchQuery && (
-                     <div className="flex flex-col h-full items-center justify-center text-gray-400 space-y-4">
-                       <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center"><SearchIcon className="h-8 w-8 text-gray-300" /></div>
-                       <p className="text-xs font-bold">No messages yet. Say hello!</p>
-                     </div>
-                   )}
-                   {activeMessages.length === 0 && chatSearchQuery && (
-                     <div className="flex h-full items-center justify-center text-gray-400 text-xs font-bold">No results found for "{chatSearchQuery}"</div>
-                   )}
-
-                   {activeMessages.map((m) => {
-                      const isMe = m.sender === "me";
-                      return (
-                        <div 
-                          key={m.id} 
-                          className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-                          onMouseEnter={() => setHoveredMsgId(m.id)}
-                          onMouseLeave={() => setHoveredMsgId(null)}
-                        >
-                           <div className={`max-w-[85%] md:max-w-[70%] flex flex-col relative ${isMe ? "items-end" : "items-start"}`}>
-                              {/* Sender Name in Group */}
-                              {activeContact.type === 'group' && !isMe && (
-                                <span className="text-[10px] font-bold text-gray-500 mb-1 ml-2">{m.sender}</span>
-                              )}
-
-                              {/* Message Actions (Hover) */}
-                              {!m.isDeleted && hoveredMsgId === m.id && (
-                                <div className={`absolute top-0 -mt-8 bg-white shadow-lg border border-gray-100 rounded-xl p-1 flex space-x-1 z-10 ${isMe ? 'right-0' : 'left-0'}`}>
-                                  <button onClick={() => toggleReaction(m.id, "👍")} className="p-1.5 hover:bg-gray-50 rounded-lg text-sm">👍</button>
-                                  <button onClick={() => toggleReaction(m.id, "❤️")} className="p-1.5 hover:bg-gray-50 rounded-lg text-sm">❤️</button>
-                                  <div className="w-px h-4 bg-gray-100 my-auto mx-1" />
-                                  <button onClick={() => setReplyingTo(m)} className="p-1.5 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-lg"><Reply className="h-3.5 w-3.5" /></button>
-                                  {isMe && <button onClick={() => { setEditingMsg(m); setInput(m.text); }} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-gray-50 rounded-lg"><Edit2 className="h-3.5 w-3.5" /></button>}
-                                  {isMe && <button onClick={() => handleDelete(m.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded-lg"><Trash className="h-3.5 w-3.5" /></button>}
-                                </div>
-                              )}
-
-                              {/* Replied Message Preview */}
-                              {m.replyTo && (
-                                <div className={`mb-1 p-2 rounded-xl text-[10px] border-l-2 opacity-75 ${isMe ? 'bg-primary/20 border-white text-white' : 'bg-gray-100 border-primary text-gray-600'}`}>
-                                  <span className="font-bold block mb-0.5">{m.replyTo.sender === "me" ? "You" : m.replyTo.sender}</span>
-                                  <span className="truncate block">{m.replyTo.text}</span>
-                                </div>
-                              )}
-
-                              {/* Bubble */}
-                              <div className={`px-5 py-3.5 rounded-2xl text-sm font-medium leading-relaxed shadow-md transition-all ${
-                                 m.isDeleted ? "bg-white border border-gray-200 text-gray-400 italic"
-                                 : isMe 
-                                 ? "bg-primary text-white rounded-tr-none border border-primary-dark" 
-                                 : "bg-white text-gray-800 rounded-tl-none border border-gray-200"
-                              }`}>
-                                 {m.file ? (
-                                   <div className="flex flex-col gap-3 min-w-[200px]">
-                                     {m.file.type === 'image' ? (
-                                       <img 
-                                         src={m.file.url} 
-                                         alt={m.file.name} 
-                                         className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity" 
-                                         onClick={() => setImagePreview(m.file!.url)}
-                                       />
-                                     ) : (
-                                       <div className={`flex items-center gap-3 p-3 rounded-xl ${isMe ? 'bg-white/10' : 'bg-gray-50'}`}>
-                                         <div className={`p-2 rounded-lg ${isMe ? 'bg-white/20' : 'bg-white shadow-sm'}`}><FileText className="h-6 w-6" /></div>
-                                         <div className="flex-1 min-w-0">
-                                           <p className="font-bold truncate text-xs">{m.file.name}</p>
-                                           <p className="text-[10px] opacity-70">{m.file.size}</p>
-                                         </div>
-                                         <button className="p-1 hover:bg-white/20 rounded-lg"><Download className="h-4 w-4" /></button>
-                                       </div>
-                                     )}
-                                     {m.file.progress !== undefined && (
-                                       <div className="w-full bg-black/20 rounded-full h-1 mt-1">
-                                         <div className="bg-white h-1 rounded-full transition-all duration-300" style={{width: `${m.file.progress}%`}}></div>
-                                       </div>
-                                     )}
-                                     {m.text !== m.file.name && <span className="mt-1 block">{m.text}</span>}
-                                   </div>
-                                 ) : (
-                                   m.text
-                                 )}
-                              </div>
-
-                              {/* Reactions */}
-                              {m.reactions && m.reactions.length > 0 && (
-                                <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                  {m.reactions.map(r => (
-                                    <div key={r.emoji} onClick={() => toggleReaction(m.id, r.emoji)} className={`px-1.5 py-0.5 rounded-full text-[10px] flex items-center cursor-pointer border ${r.userReacted ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-white border-gray-100'}`}>
-                                      {r.emoji} <span className="ml-1 font-bold">{r.count}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Meta Info (Time, Status, Edited) */}
-                              <div className={`flex items-center space-x-1.5 mt-1.5 text-[9px] font-black uppercase tracking-widest ${isMe ? 'text-gray-300' : 'text-gray-400'}`}>
-                                {m.isEdited && <span>Edited</span>}
-                                {m.isEdited && <span>•</span>}
-                                <span>{m.time}</span>
-                                {isMe && !m.isDeleted && (
-                                  <span className="ml-1">
-                                    {m.status === 'sending' && <Circle className="h-3 w-3 animate-pulse" />}
-                                    {m.status === 'sent' && <Check className="h-3 w-3" />}
-                                    {m.status === 'delivered' && <CheckCheck className="h-3 w-3" />}
-                                    {m.status === 'seen' && <CheckCheck className="h-3 w-3 text-blue-500" />}
-                                  </span>
-                                )}
-                              </div>
-                           </div>
-                        </div>
-                      )
-                   })}
-                   
-                   {/* Typing Indicator */}
-                   {isTyping && (
-                     <div className="flex justify-start">
-                       <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-none px-4 py-3 flex space-x-1 items-center shadow-sm">
-                         <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-                         <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                         <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
-                       </div>
-                     </div>
-                   )}
-                   <div ref={messagesEndRef} />
-                </div>
-
-                {/* Reply Indicator */}
-                {replyingTo && (
-                  <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-0.5">Replying to {replyingTo.sender === "me" ? "yourself" : replyingTo.sender}</p>
-                      <p className="text-xs text-gray-600 truncate max-w-md">{replyingTo.text}</p>
-                    </div>
-                    <button onClick={() => setReplyingTo(null)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-xl"><X className="h-4 w-4" /></button>
-                  </div>
-                )}
-                
-                {/* Editing Indicator */}
-                {editingMsg && (
-                  <div className="px-6 py-3 bg-blue-50 border-t border-blue-100 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-0.5">Editing Message</p>
-                    </div>
-                    <button onClick={() => {setEditingMsg(null); setInput("");}} className="p-1.5 text-gray-400 hover:text-red-500 rounded-xl"><X className="h-4 w-4" /></button>
-                  </div>
-                )}
-
-                {/* Chat Input */}
-                <div className="p-4 md:p-6 bg-white border-t border-gray-200 z-10">
-                   <div className="flex items-center space-x-2 md:space-x-4 bg-white p-2 rounded-2xl border-2 border-gray-200 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10 transition-all shadow-sm">
-                      
-                      {/* Attach File */}
-                      <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" id="file-upload" />
-                      <label htmlFor="file-upload" className="p-2 md:p-2.5 text-gray-400 hover:text-primary hover:bg-white rounded-xl transition-all cursor-pointer">
-                        <Paperclip className="h-5 w-5" />
-                      </label>
-                      
-                      {/* Emoji Picker Fake */}
-                      <button className="hidden md:block p-2 text-gray-400 hover:text-primary hover:bg-white rounded-xl transition-all">
-                        <Smile className="h-5 w-5" />
-                      </button>
-
-                      {/* Input Field */}
-                      <input 
-                        type="text" 
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder={activeContact.type === 'group' ? "Message group..." : "Type a message..."} 
-                        className="flex-1 bg-transparent border-none text-sm font-semibold text-gray-700 outline-none py-2 px-2 placeholder-gray-400"
-                      />
-                      
-                      {/* Send Button */}
-                      <button 
-                        onClick={handleSend}
-                        disabled={!input.trim() && !editingMsg}
-                        className={`h-10 w-10 md:h-12 md:w-12 rounded-xl flex items-center justify-center shadow-lg transition-all ${
-                          (!input.trim() && !editingMsg) ? 'bg-gray-200 text-gray-400 shadow-none' : 'bg-primary text-white shadow-primary/20 hover:scale-105 active:scale-95'
-                        }`}
-                      >
-                         <Send className="h-4 w-4 md:h-5 md:w-5" />
-                      </button>
-                   </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center bg-gray-50">
-                <div className="h-24 w-24 bg-white rounded-full shadow-sm flex items-center justify-center mb-6">
-                  <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center text-primary">
-                    <Search className="h-6 w-6" />
-                  </div>
-                </div>
-                <h2 className="text-lg font-black text-gray-800 tracking-tight">Select a chat to start messaging</h2>
-                <p className="text-xs text-gray-400 font-medium mt-2">Choose from your existing conversations or create a new group.</p>
-              </div>
-            )}
-         </div>
-      </div>
-
-      {/* Image Preview Modal */}
-      {imagePreview && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center" onClick={() => setImagePreview(null)}>
-          <button className="absolute top-6 right-6 p-2 text-white/70 hover:text-white bg-white/10 rounded-full transition-all">
-            <X className="h-6 w-6" />
-          </button>
-          <img src={imagePreview} alt="Preview" className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl" />
-        </div>
-      )}
-
-      {/* Create Group Modal */}
-      {showGroupModal && (
-        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden transform transition-all">
-            <div className="px-6 py-5 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
-              <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Create New Group</h2>
-              <button onClick={() => setShowGroupModal(false)} className="text-gray-400 hover:text-red-500 transition-colors p-1 bg-white rounded-full shadow-sm">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              {/* Avatar Upload Fake */}
-              <div className="flex flex-col items-center justify-center">
-                <div className="h-20 w-20 bg-gray-50 rounded-full border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group">
-                  <ImageIcon className="h-6 w-6 text-gray-400 group-hover:text-primary" />
-                </div>
-                <p className="text-[10px] font-black text-gray-400 uppercase mt-3">Upload Group Icon</p>
-              </div>
-
+      <div className="h-[calc(100vh-140px)] flex bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden -mx-6 -mt-6">
+        <aside className={`w-full md:w-[360px] border-r border-gray-200 flex-col bg-gray-50 ${showSidebar ? "flex" : "hidden md:flex"}`}>
+          <div className="p-5 border-b border-gray-200 bg-white">
+            <div className="flex items-center justify-between gap-3 mb-5">
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Group Name</label>
-                <input 
-                  type="text" 
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  placeholder="e.g. Project Alpha Team" 
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                />
+                <h1 className="text-base font-black text-gray-800 uppercase tracking-widest">Messages</h1>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">
+                  {isAdminRole ? "Admin group controls enabled" : "Groups are created by admins"}
+                </p>
               </div>
-              
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Select Members</label>
-                <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
-                  {contacts.filter(c => c.type === 'user').map(c => {
-                    const isSelected = selectedMembers.includes(c.name);
-                    return (
-                      <div 
-                        key={c.id} 
-                        onClick={() => {
-                          if (isSelected) setSelectedMembers(selectedMembers.filter(m => m !== c.name));
-                          else setSelectedMembers([...selectedMembers, c.name]);
-                        }}
-                        className={`flex items-center space-x-3 p-3 rounded-xl cursor-pointer border transition-all ${
-                          isSelected 
-                            ? 'border-primary bg-primary/5' 
-                            : 'border-gray-50 bg-gray-50 hover:bg-gray-100'
-                        }`}
-                      >
-                        <div className="h-8 w-8 rounded-lg bg-white flex items-center justify-center text-primary font-black text-xs shadow-sm">
-                          {c.name.charAt(0)}
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-xs font-bold text-gray-700 block">{c.name}</span>
-                          <span className="text-[9px] font-black text-gray-400 uppercase">{c.role}</span>
-                        </div>
-                        {isSelected && (
-                          <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center shadow-sm">
-                            <Check className="h-3 w-3 text-white" />
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+              {isAdminRole ? (
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroup(true)}
+                  className="h-10 w-10 rounded-xl bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/20 hover:bg-primary/90"
+                  title="Create group"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              ) : (
+                <div title="Only admins can create groups" className="h-10 w-10 rounded-xl bg-gray-100 text-gray-300 flex items-center justify-center">
+                  <Lock className="h-4 w-4" />
                 </div>
-              </div>
-              <Button onClick={handleCreateGroup} className="w-full justify-center h-12 text-xs">
-                Create Group
-              </Button>
+              )}
+            </div>
+
+            <div className="relative mb-4">
+              <Search className="absolute left-3.5 top-3 h-4 w-4 text-gray-300" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search conversations..."
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm font-semibold text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {(["all", "unread", "groups"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                    activeTab === tab ? "bg-primary text-white shadow-sm" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
+
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {loading && <div className="p-6 text-center text-xs font-black uppercase tracking-widest text-gray-400">Loading chats...</div>}
+            {!loading && visibleConversations.length === 0 && (
+              <div className="p-6 text-center">
+                <MessageSquare className="h-8 w-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-xs font-black uppercase tracking-widest text-gray-400">No conversations found.</p>
+              </div>
+            )}
+            {visibleConversations.map((conversation) => {
+              const conversationName = conversation.type === "direct" ? getDirectConversationName(conversation, currentUserKey) : conversation.name;
+              const avatar = conversation.type === "direct" ? getDirectAvatar(conversation, currentUserKey) : conversation.avatar;
+              const unread = conversation.unread_by?.includes(currentUserKey);
+              return (
+                <button
+                  key={String(conversation.id)}
+                  type="button"
+                  onClick={() => handleSelectConversation(conversation)}
+                  className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-all ${
+                    activeConversationId === conversation.id ? "bg-white shadow-sm ring-1 ring-gray-100" : "hover:bg-white/70"
+                  }`}
+                >
+                  <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-black">
+                    {avatar ? <img src={avatar} alt="" className="h-full w-full object-cover" /> : conversation.type === "group" ? <Users className="h-5 w-5" /> : conversationName.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-black text-gray-800">{conversationName}</p>
+                      <span className="text-[9px] font-bold text-gray-400">{formatTime(conversation.last_message_at)}</span>
+                    </div>
+                    <p className={`mt-1 truncate text-xs ${unread ? "font-black text-gray-800" : "font-medium text-gray-400"}`}>
+                      {conversation.last_message || "No messages yet"}
+                    </p>
+                  </div>
+                  {unread && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <main className={`flex-1 flex-col bg-white ${!showSidebar ? "flex" : "hidden md:flex"}`}>
+          {activeConversation ? (
+            <>
+              <header className="px-5 md:px-8 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
+                <div className="flex items-center gap-4 min-w-0">
+                  <button type="button" onClick={() => setShowSidebar(true)} className="md:hidden p-2 -ml-2 text-gray-400 hover:text-primary">
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <div className="h-11 w-11 rounded-2xl bg-primary text-white flex items-center justify-center overflow-hidden shadow-lg shadow-primary/20">
+                    {(activeConversation.type === "direct" ? getDirectAvatar(activeConversation, currentUserKey) : activeConversation.avatar) ? (
+                      <img src={activeConversation.type === "direct" ? getDirectAvatar(activeConversation, currentUserKey) : activeConversation.avatar} alt="" className="h-full w-full object-cover" />
+                    ) : activeConversation.type === "group" ? (
+                      <Users className="h-5 w-5" />
+                    ) : (
+                      displayName.charAt(0)
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-sm font-black text-gray-800">{displayName}</h2>
+                    <p className="truncate text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                      {activeConversation.type === "group"
+                        ? `${activeConversation.participants.length} members`
+                        : activeConversation.participants.find((member) => member.key !== currentUserKey)?.role || "Direct chat"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => setChatSearchQuery("")} className="hidden md:flex p-2.5 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-xl">
+                    <Search className="h-5 w-5" />
+                  </button>
+                  {activeConversation.type === "group" && (
+                    <button type="button" onClick={() => setShowGroupSettings(true)} className="p-2.5 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-xl">
+                      <Info className="h-5 w-5" />
+                    </button>
+                  )}
+                  <button type="button" onClick={archiveActiveConversation} className="p-2.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl">
+                    <Archive className="h-5 w-5" />
+                  </button>
+                  <button type="button" className="p-2.5 text-gray-400 hover:text-primary hover:bg-gray-50 rounded-xl">
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
+                </div>
+              </header>
+
+              <div className="px-5 md:px-8 py-3 bg-gray-50 border-b border-gray-100">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-300" />
+                  <input
+                    value={chatSearchQuery}
+                    onChange={(event) => setChatSearchQuery(event.target.value)}
+                    placeholder="Search inside this conversation..."
+                    className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-xs font-bold text-gray-700 outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              {activePinnedMessage && (
+                <button type="button" className="flex items-center gap-3 bg-primary/5 px-5 md:px-8 py-3 text-left border-b border-primary/10">
+                  <Pin className="h-4 w-4 text-primary" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-primary">Pinned Message</p>
+                    <p className="truncate text-xs font-bold text-gray-700">{activePinnedMessage.body}</p>
+                  </div>
+                </button>
+              )}
+
+              <section className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-8 space-y-6">
+                {activeMessages.length === 0 && (
+                  <div className="flex h-full flex-col items-center justify-center text-center">
+                    <MessageSquare className="h-12 w-12 text-gray-300 mb-4" />
+                    <p className="text-sm font-black uppercase tracking-widest text-gray-400">No messages yet</p>
+                    <p className="mt-2 text-xs text-gray-400">Start the conversation from the composer below.</p>
+                  </div>
+                )}
+
+                {activeMessages.map((message) => {
+                  const isMe = message.sender_key === currentUserKey;
+                  const deleted = Boolean(message.deleted_at);
+                  return (
+                    <div key={String(message.id)} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[88%] md:max-w-[72%] ${isMe ? "items-end" : "items-start"} flex flex-col`}>
+                        {activeConversation.type === "group" && !isMe && (
+                          <span className="mb-1 ml-2 text-[10px] font-black uppercase tracking-widest text-gray-400">{message.sender_name}</span>
+                        )}
+                        {message.reply_to_id && (
+                          <div className={`mb-1 rounded-xl border-l-2 px-3 py-2 text-[10px] font-bold ${isMe ? "bg-primary/10 border-primary text-primary" : "bg-white border-gray-300 text-gray-500"}`}>
+                            Replying to message
+                          </div>
+                        )}
+                        <div className={`rounded-2xl px-4 py-3 text-sm font-medium leading-relaxed shadow-sm border ${isMe ? "rounded-tr-sm bg-primary text-white border-primary" : "rounded-tl-sm bg-white text-gray-800 border-gray-100"}`}>
+                          {deleted ? (
+                            <span className="italic opacity-70">This message was deleted.</span>
+                          ) : (
+                            <>
+                              {message.body && <p>{message.body}</p>}
+                              {Boolean(message.attachments?.length) && (
+                                <div className="mt-3 grid gap-3">
+                                  {message.attachments?.map((attachment) =>
+                                    attachment.type === "image" ? (
+                                      <button key={attachment.id} type="button" onClick={() => setImagePreview(attachment.url)} className="overflow-hidden rounded-xl border border-white/20 bg-black/5 text-left">
+                                        <img src={attachment.url} alt={attachment.name} className="max-h-72 w-full object-cover" />
+                                        <span className="block px-3 py-2 text-[10px] font-black uppercase tracking-widest opacity-80">{attachment.name}</span>
+                                      </button>
+                                    ) : (
+                                      <a key={attachment.id} href={attachment.url} download className={`flex items-center gap-3 rounded-xl p-3 ${isMe ? "bg-white/10 text-white" : "bg-gray-50 text-gray-700"}`}>
+                                        <FileText className="h-5 w-5" />
+                                        <span className="min-w-0 flex-1 truncate text-xs font-black">{attachment.name}</span>
+                                        <span className="text-[10px] opacity-70">{attachment.size_label}</span>
+                                        <Download className="h-4 w-4" />
+                                      </a>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {!deleted && (
+                          <div className={`mt-2 flex flex-wrap gap-1 ${isMe ? "justify-end" : "justify-start"}`}>
+                            {(message.reactions || []).map((reaction) => {
+                              const ReactionIcon = reactionMeta[reaction.key].icon;
+                              const active = reaction.user_keys.includes(currentUserKey);
+                              return (
+                                <button
+                                  key={reaction.key}
+                                  type="button"
+                                  onClick={() => toggleReaction(message, reaction.key)}
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black ${active ? "border-primary/20 bg-primary/10 text-primary" : "border-gray-100 bg-white text-gray-400"}`}
+                                >
+                                  <ReactionIcon className="h-3 w-3" />
+                                  {reaction.count}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className={`mt-1.5 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-400 ${isMe ? "justify-end" : "justify-start"}`}>
+                          {message.edited_at && <span>Edited</span>}
+                          <span>{formatTime(message.created_at)}</span>
+                          {isMe && !deleted && (getMessageStatus(message, currentUserKey) === "seen" ? <CheckCheck className="h-3 w-3 text-blue-500" /> : <Check className="h-3 w-3" />)}
+                          {!deleted && (
+                            <>
+                              <button type="button" onClick={() => setReplyingTo(message)} className="rounded p-1 hover:bg-white hover:text-primary" title="Reply">
+                                <Reply className="h-3 w-3" />
+                              </button>
+                              {(["like", "heart", "laugh"] as const).map((reactionKey) => {
+                                const ReactionIcon = reactionMeta[reactionKey].icon;
+                                return (
+                                  <button key={reactionKey} type="button" onClick={() => toggleReaction(message, reactionKey)} className="rounded p-1 hover:bg-white hover:text-primary" title={reactionMeta[reactionKey].label}>
+                                    <ReactionIcon className="h-3 w-3" />
+                                  </button>
+                                );
+                              })}
+                              {(isMe || canManageActiveGroup) && (
+                                <button type="button" onClick={() => handleDeleteMessage(message)} className="rounded p-1 hover:bg-white hover:text-red-500" title="Delete">
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={messagesEndRef} />
+              </section>
+
+              {replyingTo && (
+                <div className="border-t border-gray-100 bg-gray-50 px-5 md:px-8 py-3 flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-primary">Replying to {replyingTo.sender_key === currentUserKey ? "your message" : replyingTo.sender_name}</p>
+                    <p className="truncate text-xs font-bold text-gray-500">{replyingTo.body}</p>
+                  </div>
+                  <button type="button" onClick={() => setReplyingTo(null)} className="p-2 text-gray-400 hover:text-red-500">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              <footer className="border-t border-gray-200 bg-white p-4 md:p-6">
+                {!canSendInActiveConversation && (
+                  <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                    This group only allows admins to send messages.
+                  </div>
+                )}
+                <div className="flex items-center gap-2 rounded-2xl border-2 border-gray-200 bg-white p-2 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                    onChange={(event) => handleAttachmentUpload(event.target.files)}
+                    className="hidden"
+                  />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!canUploadInActiveConversation} className="rounded-xl p-2.5 text-gray-400 hover:bg-gray-50 hover:text-primary disabled:opacity-40">
+                    <Paperclip className="h-5 w-5" />
+                  </button>
+                  <button type="button" className="hidden md:block rounded-xl p-2.5 text-gray-400 hover:bg-gray-50 hover:text-primary">
+                    <Smile className="h-5 w-5" />
+                  </button>
+                  <input
+                    type="text"
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => event.key === "Enter" && handleSend()}
+                    disabled={!canSendInActiveConversation}
+                    placeholder={activeConversation.type === "group" ? "Message group..." : "Type a message..."}
+                    className="min-w-0 flex-1 border-none bg-transparent px-2 py-2 text-sm font-semibold text-gray-700 outline-none placeholder:text-gray-400 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={!canSendInActiveConversation || !draft.trim()}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-primary/20 transition-all hover:scale-105 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
+                  >
+                    <Send className="h-5 w-5" />
+                  </button>
+                </div>
+              </footer>
+            </>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center bg-gray-50 text-center">
+              <MessageSquare className="h-14 w-14 text-gray-300 mb-5" />
+              <h2 className="text-lg font-black text-gray-800">Select a conversation</h2>
+              <p className="mt-2 text-xs font-medium text-gray-400">Choose a direct message or group from the left side.</p>
+            </div>
+          )}
+        </main>
+      </div>
+
+      <Modal isOpen={showCreateGroup} onClose={() => setShowCreateGroup(false)} title="Create Group" size="lg">
+        <div className="space-y-5">
+          <div className="flex items-center gap-5">
+            <button type="button" onClick={() => groupAvatarInputRef.current?.click()} className="h-20 w-20 overflow-hidden rounded-2xl border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 hover:border-primary hover:text-primary">
+              {newGroupAvatar ? <img src={newGroupAvatar} alt="" className="h-full w-full object-cover" /> : <Camera className="h-6 w-6" />}
+            </button>
+            <input ref={groupAvatarInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => handleGroupAvatarUpload(event.target.files, "create")} />
+            <div className="flex-1">
+              <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Group Name</label>
+              <input value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} className="w-full rounded-xl border border-gray-200 px-4 py-3 text-xs font-bold outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="e.g. HR Operations" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Description</label>
+            <textarea value={newGroupDescription} onChange={(event) => setNewGroupDescription(event.target.value)} rows={3} className="w-full rounded-xl border border-gray-200 px-4 py-3 text-xs font-bold outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Purpose of this group" />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Members</label>
+            <div className="grid max-h-72 grid-cols-1 md:grid-cols-2 gap-2 overflow-y-auto pr-1">
+              {directory.filter((member) => member.key !== currentUserKey).map((member) => {
+                const selected = selectedMemberKeys.includes(member.key);
+                return (
+                  <button
+                    key={member.key}
+                    type="button"
+                    onClick={() =>
+                      setSelectedMemberKeys((current) => (selected ? current.filter((key) => key !== member.key) : [...current, member.key]))
+                    }
+                    className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${selected ? "border-primary bg-primary/5" : "border-gray-100 bg-gray-50 hover:bg-gray-100"}`}
+                  >
+                    <MemberAvatar member={member} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-black text-gray-800">{member.name}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{member.type} / {member.role}</p>
+                    </div>
+                    {selected && <Check className="h-4 w-4 text-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs font-medium leading-relaxed text-blue-700">
+            Only admins can create groups. After creation, the admin can promote group admins. Group admins can remove members and manage group settings.
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button type="button" onClick={() => setShowCreateGroup(false)} className="h-10 bg-gray-50 text-gray-600 border border-gray-100 px-5 text-[10px] font-black uppercase tracking-widest">Cancel</Button>
+            <Button type="button" onClick={handleCreateGroup} className="h-10 bg-primary text-white px-5 text-[10px] font-black uppercase tracking-widest">Create Group</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <GroupSettingsModal
+        isOpen={showGroupSettings}
+        conversation={activeConversation}
+        directory={directory}
+        currentUserKey={currentUserKey}
+        canManage={canManageActiveGroup}
+        canEditInfo={canEditActiveGroupInfo}
+        settingsAvatarInputRef={settingsAvatarInputRef}
+        onClose={() => setShowGroupSettings(false)}
+        onAvatarUpload={(files) => handleGroupAvatarUpload(files, "settings")}
+        onUpdateInfo={updateGroupInfo}
+        onUpdateSetting={updateGroupSetting}
+        onAddMember={addGroupMember}
+        onRemoveMember={removeGroupMember}
+        onToggleAdmin={toggleGroupAdmin}
+      />
+
+      {imagePreview && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4" onClick={() => setImagePreview(null)}>
+          <button type="button" className="absolute right-6 top-6 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+            <X className="h-6 w-6" />
+          </button>
+          <img src={imagePreview} alt="Preview" className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl" />
         </div>
       )}
     </DashboardLayout>
+  );
+}
+
+function MemberAvatar({ member }: { member: ChatMember }) {
+  return (
+    <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-xl bg-primary/10 text-primary flex items-center justify-center text-xs font-black uppercase">
+      {member.avatar ? <img src={member.avatar} alt="" className="h-full w-full object-cover" /> : member.name.charAt(0)}
+    </div>
+  );
+}
+
+function ToggleRow({ label, description, checked, disabled, onChange }: { label: string; description: string; checked: boolean; disabled?: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
+      <div>
+        <p className="text-xs font-black text-gray-800">{label}</p>
+        <p className="mt-1 text-[10px] font-medium text-gray-400">{description}</p>
+      </div>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${checked ? "bg-primary" : "bg-gray-300"}`}
+      >
+        <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${checked ? "left-6" : "left-1"}`} />
+      </button>
+    </div>
+  );
+}
+
+function GroupSettingsModal({
+  isOpen,
+  conversation,
+  directory,
+  currentUserKey,
+  canManage,
+  canEditInfo,
+  settingsAvatarInputRef,
+  onClose,
+  onAvatarUpload,
+  onUpdateInfo,
+  onUpdateSetting,
+  onAddMember,
+  onRemoveMember,
+  onToggleAdmin,
+}: {
+  isOpen: boolean;
+  conversation: ChatConversation | null;
+  directory: ChatMember[];
+  currentUserKey: string;
+  canManage: boolean;
+  canEditInfo: boolean;
+  settingsAvatarInputRef: React.RefObject<HTMLInputElement | null>;
+  onClose: () => void;
+  onAvatarUpload: (files: FileList | null) => void;
+  onUpdateInfo: (name: string, description: string) => void;
+  onUpdateSetting: (patch: Partial<GroupSettings>) => void;
+  onAddMember: (memberKey: string) => void;
+  onRemoveMember: (memberKey: string) => void;
+  onToggleAdmin: (memberKey: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    setName(conversation?.name || "");
+    setDescription(conversation?.description || "");
+  }, [conversation?.description, conversation?.name]);
+
+  if (!conversation || conversation.type !== "group") return null;
+
+  const availableMembers = directory.filter((member) => !conversation.participant_keys.includes(member.key));
+  const settings = conversation.settings || {};
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Group Settings" size="xl">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-5 text-center">
+            <button type="button" disabled={!canEditInfo} onClick={() => settingsAvatarInputRef.current?.click()} className="mx-auto h-28 w-28 overflow-hidden rounded-3xl bg-white text-gray-300 flex items-center justify-center shadow-sm disabled:cursor-not-allowed">
+              {conversation.avatar ? <img src={conversation.avatar} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-8 w-8" />}
+            </button>
+            <input ref={settingsAvatarInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => onAvatarUpload(event.target.files)} />
+            <p className="mt-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Group Icon</p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 p-5">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-800 mb-4">Group Info</h3>
+            <div className="space-y-3">
+              <input value={name} disabled={!canEditInfo} onChange={(event) => setName(event.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-primary disabled:bg-gray-50" />
+              <textarea value={description} disabled={!canEditInfo} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-primary disabled:bg-gray-50" />
+              <Button type="button" disabled={!canEditInfo} onClick={() => onUpdateInfo(name, description)} className="h-10 w-full bg-primary text-white text-[10px] font-black uppercase tracking-widest">
+                Save Info
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 p-5">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-800 mb-4">Safety</h3>
+            <div className="space-y-3 text-xs font-medium text-gray-500">
+              <p className="flex items-center gap-2"><Lock className="h-4 w-4 text-primary" /> End-to-end encryption placeholder for backend provider.</p>
+              <p className="flex items-center gap-2"><Shield className="h-4 w-4 text-primary" /> Admin-controlled member and media settings.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ToggleRow
+              label="Only Admins Can Send"
+              description="Locks the composer for normal members."
+              checked={Boolean(settings.only_admins_can_send)}
+              disabled={!canManage}
+              onChange={(value) => onUpdateSetting({ only_admins_can_send: value })}
+            />
+            <ToggleRow
+              label="Only Admins Edit Info"
+              description="Prevents members from editing name, icon, and description."
+              checked={settings.only_admins_can_edit_info !== false}
+              disabled={!canManage}
+              onChange={(value) => onUpdateSetting({ only_admins_can_edit_info: value })}
+            />
+            <ToggleRow
+              label="Member Uploads"
+              description="Allow members to share images and files."
+              checked={settings.allow_member_uploads !== false}
+              disabled={!canManage}
+              onChange={(value) => onUpdateSetting({ allow_member_uploads: value })}
+            />
+            <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
+              <p className="text-xs font-black text-gray-800">Disappearing Messages</p>
+              <select disabled={!canManage} value={settings.disappearing_messages_days || 0} onChange={(event) => onUpdateSetting({ disappearing_messages_days: Number(event.target.value) })} className="mt-3 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold disabled:bg-gray-50">
+                <option value={0}>Off</option>
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-800">Participants</h3>
+                <p className="mt-1 text-[10px] font-bold text-gray-400">{conversation.participants.length} members</p>
+              </div>
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <div className="space-y-2">
+              {conversation.participants.map((member) => {
+                const isGroupAdmin = Boolean(conversation.admin_keys?.includes(member.key));
+                const isCreator = member.key === conversation.created_by;
+                return (
+                  <div key={member.key} className="flex items-center gap-3 rounded-2xl bg-gray-50/70 p-3">
+                    <MemberAvatar member={member} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-black text-gray-800">{member.name}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                        {member.type} {isGroupAdmin ? "/ Group Admin" : ""} {isCreator ? "/ Creator" : ""}
+                      </p>
+                    </div>
+                    {canManage && member.key !== currentUserKey && (
+                      <div className="flex gap-1">
+                        <button type="button" disabled={isCreator} onClick={() => onToggleAdmin(member.key)} className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-30" title={isGroupAdmin ? "Remove admin" : "Make admin"}>
+                          <Shield className="h-4 w-4" />
+                        </button>
+                        <button type="button" disabled={isCreator} onClick={() => onRemoveMember(member.key)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" title="Remove member">
+                          <UserMinus className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {canManage && (
+            <div className="rounded-2xl border border-gray-100 p-5">
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-800 mb-4">Add Members</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {availableMembers.map((member) => (
+                  <button key={member.key} type="button" onClick={() => onAddMember(member.key)} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 text-left hover:border-primary/30">
+                    <MemberAvatar member={member} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-black text-gray-800">{member.name}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{member.type}</p>
+                    </div>
+                    <UserPlus className="h-4 w-4 text-primary" />
+                  </button>
+                ))}
+                {availableMembers.length === 0 && <p className="text-xs font-bold text-gray-400">All available users are already in this group.</p>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }

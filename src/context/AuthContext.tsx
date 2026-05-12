@@ -11,7 +11,7 @@ import {
   saveOriginalSession,
   saveSession,
 } from "@/lib/session";
-import { canRoleAccessPath, getDefaultRouteForRole, isPublicPath, userHasPermission, type AuthUser, type PermissionKey } from "@/lib/auth-contract";
+import { canUserAccessPath, getDefaultRouteForRole, getDefaultRouteForUser, isPublicPath, userHasPermission, type AuthUser, type PermissionKey } from "@/lib/auth-contract";
 import { useToast } from "./ToastContext";
 
 interface AuthContextType {
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user && !canRoleAccessPath(user.role, pathname)) {
+    if (user && !canUserAccessPath(user, pathname)) {
       router.replace(`/unauthorized?from=${encodeURIComponent(pathname)}`);
     }
   }, [isLoading, pathname, router, user]);
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     saveSession(token, user, remember);
     setUser(user);
     showToast(`Welcome, ${user.name}!`);
-    const safeRedirect = redirectTo && canRoleAccessPath(user.role, redirectTo) ? redirectTo : getDefaultRouteForRole(user.role);
+    const safeRedirect = redirectTo && canUserAccessPath(user, redirectTo) ? redirectTo : getDefaultRouteForUser(user);
     router.push(safeRedirect);
   };
 
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const canAccess = (targetPathname: string) => Boolean(user && canRoleAccessPath(user.role, targetPathname));
+  const canAccess = (targetPathname: string) => canUserAccessPath(user, targetPathname);
   const hasPermission = (permission: PermissionKey) => userHasPermission(user, permission);
 
   return (

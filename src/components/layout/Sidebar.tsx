@@ -4,7 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { UserRole } from "@/lib/auth-contract";
+import { canUserAccessPath, userHasPermission, type AuthUser, type PermissionKey, type UserRole } from "@/lib/auth-contract";
+import { isSaasBillingEnabled } from "@/lib/product-config";
 import { useAuth } from "@/context/AuthContext";
 import logo from "../../../public/logo.png";
 import logo2 from "../../../public/logo-full.png";
@@ -55,7 +56,8 @@ const menuItems: MenuItem[] = [
     href: "/super-admin/dashboard",
     submenu: [
       { label: "Dashboard", href: "/super-admin/dashboard" },
-      { label: "Companies", href: "/super-admin/companies" },
+      { label: "Company / Branches", href: "/super-admin/companies" },
+      { label: "Admins", href: "/super-admin/admins" },
       { label: "Packages", href: "/super-admin/packages" },
       { label: "Invoices", href: "/super-admin/invoices" },
       { label: "Settings", href: "/super-admin/settings" },
@@ -206,6 +208,7 @@ const menuItems: MenuItem[] = [
       { label: "Income vs Expense", href: "/reports/income-expense" },
       { label: "Leave Report", href: "/reports/leave" },
       { label: "Attendance Report", href: "/reports/attendance" },
+      { label: "Payroll Report", href: "/reports/payroll" },
     ],
   },
   { icon: BookOpen, label: "Billing", href: "/billing" },
@@ -247,7 +250,7 @@ const quickAddItems = [
 const roleMenuAccess: Record<UserRole, string[]> = {
   super_admin: ["Super Admin"],
   admin: menuItems.filter((item) => item.label !== "Super Admin").map((item) => item.label),
-  employee: ["Dashboard", "HR", "Work", "Tickets", "Messages", "Events", "Notice Board", "FAQ", "Search"],
+  employee: ["Dashboard", "HR", "Work", "Payroll", "Tickets", "Messages", "Events", "Notice Board", "FAQ", "Search"],
   client: ["Dashboard", "Work", "Finance", "Tickets", "Messages", "Events", "Notice Board", "FAQ", "Search"],
 };
 
@@ -256,6 +259,7 @@ const roleSubmenuAccess: Partial<Record<UserRole, Record<string, string[]>>> = {
     Dashboard: ["Member Dashboard", "Project Dashboard", "Ticket Dashboard"],
     HR: ["Attendance", "Holidays", "Leaves"],
     Work: ["Projects", "Tasks", "Task Board", "Task Calendar", "Time Logs", "Discussion"],
+    Payroll: ["My Payslips"],
     Tickets: ["Tickets"],
   },
   client: {
@@ -271,6 +275,23 @@ const roleQuickAddAccess: Record<UserRole, string[]> = {
   admin: quickAddItems.map((item) => item.label),
   employee: ["Add Task", "Add Ticket"],
   client: ["Add Ticket"],
+};
+
+const quickAddPermissionMap: Partial<Record<string, PermissionKey>> = {
+  "Add Project": "projects.create",
+  "Add Task": "tasks.create",
+  "Add Client": "clients.create",
+  "Add Employee": "employees.create",
+  "Add Payment": "finance.create",
+  "Add Ticket": "tickets.create",
+  "Add Payroll": "payroll.create",
+};
+
+const canOpenItem = (user: AuthUser | null, userRole: UserRole, item: MenuItem) => {
+  if (userRole !== "admin") return true;
+  if (!user) return false;
+  if (canUserAccessPath(user, item.href)) return true;
+  return Boolean(item.submenu?.some((sub) => canUserAccessPath(user, sub.href)));
 };
 
 interface SidebarProps {
@@ -299,26 +320,51 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
 
     return menuItems
       .filter((item) => allowedMenus.includes(item.label))
+      .filter((item) => isSaasBillingEnabled || item.label !== "Billing")
+      .filter((item) => canOpenItem(user, userRole, item))
       .map((item) => {
         const roleDashboardHref =
           userRole === "employee" ? "/member/dashboard" : userRole === "client" ? "/dashboard/client" : item.href;
-        const normalizedItem = item.label === "Dashboard" ? { ...item, href: roleDashboardHref } : item;
+        const employeePayrollItem =
+          userRole === "employee" && item.label === "Payroll"
+            ? { ...item, href: "/member/payroll", submenu: [{ label: "My Payslips", href: "/member/payroll" }] }
+            : item;
+        const normalizedItem = employeePayrollItem.label === "Dashboard" ? { ...employeePayrollItem, href: roleDashboardHref } : employeePayrollItem;
         const allowedSubmenuLabels = submenuAccess[item.label];
-        if (!item.submenu || !allowedSubmenuLabels) return normalizedItem;
+        const roleFilteredSubmenu = normalizedItem.submenu
+          ?.filter((sub) => isSaasBillingEnabled || (sub.href !== "/super-admin/packages" && sub.href !== "/super-admin/invoices"))
+          .filter((sub) => !allowedSubmenuLabels || allowedSubmenuLabels.includes(sub.label))
+          .map((sub) => (normalizedItem.label === "Dashboard" && sub.label === "Dashboard" ? { ...sub, href: roleDashboardHref } : sub));
+
+        const permissionFilteredSubmenu =
+          userRole === "admin" && user
+            ? roleFilteredSubmenu?.filter((sub) => canUserAccessPath(user, sub.href))
+            : roleFilteredSubmenu;
+
+        const href =
+          userRole === "admin" && user && !canUserAccessPath(user, normalizedItem.href) && permissionFilteredSubmenu?.length
+            ? permissionFilteredSubmenu[0].href
+            : normalizedItem.href;
+
+        if (!item.submenu) return { ...normalizedItem, href };
 
         return {
           ...normalizedItem,
-          submenu: item.submenu
-            .filter((sub) => allowedSubmenuLabels.includes(sub.label))
-            .map((sub) => (item.label === "Dashboard" && sub.label === "Dashboard" ? { ...sub, href: roleDashboardHref } : sub)),
+          href,
+          submenu: permissionFilteredSubmenu,
         };
       });
-  }, [userRole]);
+  }, [user, userRole]);
 
   const filteredQuickAddItems = useMemo(() => {
     const allowedItems = roleQuickAddAccess[userRole];
-    return quickAddItems.filter((item) => allowedItems.includes(item.label));
-  }, [userRole]);
+    return quickAddItems.filter((item) => {
+      if (!allowedItems.includes(item.label)) return false;
+      if (userRole !== "admin") return true;
+      const permission = quickAddPermissionMap[item.label];
+      return Boolean(user && permission && userHasPermission(user, permission));
+    });
+  }, [user, userRole]);
 
   useEffect(() => {
     onMobileClose?.();

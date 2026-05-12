@@ -5,13 +5,13 @@ This document explains how Super Admin, Company Admin, Employee, and Client acce
 ## 1. High-Level Hierarchy
 
 ```text
-Platform / SaaS Layer
+Internal System Layer
 +-- Super Admin
-    +-- Manages platform settings
-    +-- Manages packages and subscriptions
-    +-- Manages companies
-    +-- Creates the first admin for each company
-    +-- Can login as a company admin for support/debugging
+    +-- Manages global settings
+    +-- Manages company / branch records
+    +-- Creates admins for each company or branch
+    +-- Assigns module permissions to admins
+    +-- Can login as a company admin for support/debugging when required
 
 Company Workspace Layer
 +-- Company
@@ -45,8 +45,8 @@ There are two different administration levels:
 
 | Level | Role | Scope | Purpose |
 |---|---|---|---|
-| Platform | `super_admin` | Whole SaaS/platform | Owns and manages the HRMS platform itself |
-| Company | `admin` | One company/workspace | Manages one company account and all company data |
+| Internal System | `super_admin` | Whole HRMS installation | Owns global setup, company/branch records, admins, and permissions |
+| Company / Branch | `admin` | Assigned company/branch workspace | Manages allowed modules inside assigned scope |
 | Company User | `employee` | One company, self/team data | Works inside the company as staff |
 | Client Portal | `client` | One company, client-owned/shared data | External customer portal |
 
@@ -120,10 +120,10 @@ Frontend receives role = super_admin
 Frontend redirects to /super-admin/dashboard
         |
         v
-Super Admin manages platform modules
+Super Admin manages internal system modules
         |
         v
-Super Admin creates companies
+Super Admin creates company / branch records and admins
         |
         v
 Each company receives first company admin
@@ -133,12 +133,21 @@ Super Admin pages in the Next.js project:
 
 | Page | Purpose |
 |---|---|
-| `/super-admin/dashboard` | Platform overview |
-| `/super-admin/companies` | List/manage companies |
-| `/super-admin/companies/create` | Create company and first company admin |
-| `/super-admin/packages` | Manage subscription packages |
-| `/super-admin/invoices` | Platform/subscription invoices |
-| `/super-admin/settings` | Platform settings and Super Admin management |
+| `/super-admin/dashboard` | Internal system overview |
+| `/super-admin/companies` | List/manage company and branch records |
+| `/super-admin/companies/create` | Create company/branch and first admin |
+| `/super-admin/admins` | Create admins and assign module permissions |
+| `/super-admin/settings` | Global settings and Super Admin management |
+
+Subscription pages are hidden in internal-company mode:
+
+```text
+/super-admin/packages
+/super-admin/invoices
+/billing
+```
+
+Only enable those if the HRMS becomes a SaaS product sold to outside companies.
 
 Super Admin should not directly manage:
 
@@ -155,11 +164,11 @@ Those are company workspace pages and belong to Company Admin.
 
 ## 5. Company Creation Flow
 
-When Super Admin creates a company, the backend should create two things:
+When Super Admin creates a company or branch, the backend should create two things:
 
 ```text
-1. Company record
-2. First company admin user
+1. Company/branch record
+2. First admin user for that record
 ```
 
 Flow:
@@ -168,13 +177,13 @@ Flow:
 Super Admin opens /super-admin/companies/create
         |
         v
-Submits company details
+Submits company/branch details
         |
         v
 Submits first admin details
         |
         v
-Backend creates company
+Backend creates company/branch record
         |
         v
 Backend creates user with role = admin and company_id = new company id
@@ -190,7 +199,7 @@ Expected backend payload concept:
   "company": {
     "company_name": "Example Company",
     "company_email": "info@example.com",
-    "package_id": 1,
+    "type": "head_office",
     "status": "active"
   },
   "admin": {
@@ -550,7 +559,7 @@ Required backend rules:
 /client APIs => client with matching company_id and owned/shared records
 ```
 
-### E. Company Creation Endpoint
+### E. Company / Branch Creation Endpoint
 
 Endpoint:
 
@@ -567,9 +576,9 @@ super_admin
 Backend must:
 
 ```text
-1. Create company
+1. Create company/branch record
 2. Create first admin user
-3. Attach admin to company_id
+3. Attach admin to company_id or branch/company scope id
 4. Assign role = admin
 5. Return created company and admin summary
 ```
@@ -665,9 +674,10 @@ Backend should:
 Backend should log:
 
 ```text
-Super Admin created company
+Super Admin created company/branch
 Super Admin created another Super Admin
 Super Admin logged in as company admin
+Super Admin changed admin module permissions
 Admin created employee
 Admin created client
 Admin changed role permissions
@@ -676,10 +686,111 @@ Admin changed role permissions
 ## 12. Simple Summary For Management
 
 ```text
-Super Admin owns the platform.
-Company Admin owns one company workspace.
+Super Admin owns the internal HRMS setup.
+Company Admin manages the modules assigned to them.
 Employee works inside the company.
 Client sees only client-facing company data.
 ```
 
-First Super Admin must be created by backend/database setup. After that, Super Admin can create companies, company admins, and additional super admins from the frontend.
+First Super Admin must be created by backend/database setup. After that, Super Admin can create company/branch records, company admins, and additional super admins from the frontend.
+
+## 13. Company Admin Permission Management
+
+Super Admin can create multiple company admins and assign module permissions to each admin.
+
+Frontend route:
+
+```text
+/super-admin/admins
+```
+
+Backend resource:
+
+```text
+/v1/admins
+```
+
+Required endpoints:
+
+```text
+GET    /v1/admins
+POST   /v1/admins
+GET    /v1/admins/{id}
+PUT    /v1/admins/{id}
+PATCH  /v1/admins/{id}
+DELETE /v1/admins/{id}
+```
+
+Only `super_admin` should call these endpoints.
+
+Admin payload:
+
+```json
+{
+  "name": "HR Admin",
+  "email": "hr.admin@example.com",
+  "password": "temporary-password-on-create-only",
+  "role": "admin",
+  "company_id": 1,
+  "status": "active",
+  "permissions": [
+    "dashboard.view",
+    "employees.*",
+    "attendance.*",
+    "leaves.approve",
+    "reports.view",
+    "profile.*"
+  ],
+  "modules": ["dashboard", "employees", "attendance", "leaves", "reports"]
+}
+```
+
+Backend rules:
+
+```text
+1. Validate requester role is super_admin.
+2. Validate company_id exists and company is active.
+3. Validate email is unique among users/admins.
+4. Store password only as a hash. Never return password in API response.
+5. Store permissions as JSON array or related permission rows.
+6. Always keep at least one active admin per company.
+7. On login, include that admin's permissions in the auth user response.
+8. On company impersonation, impersonate an active admin and return that admin's permissions.
+9. Log create/update/delete/deactivate permission changes as audit events.
+```
+
+Login response for a restricted admin:
+
+```json
+{
+  "token": "jwt-or-session-token",
+  "user": {
+    "id": 12,
+    "name": "HR Admin",
+    "email": "hr.admin@example.com",
+    "role": "admin",
+    "company_id": 1,
+    "permissions": ["dashboard.view", "employees.*", "attendance.*", "leaves.*", "profile.*"],
+    "modules": ["dashboard", "employees", "attendance", "leaves"]
+  }
+}
+```
+
+Permission format:
+
+```text
+module.action
+module.*
+```
+
+Examples:
+
+```text
+employees.view
+employees.create
+attendance.approve
+finance.export
+projects.*
+```
+
+The frontend hides navigation and blocks client-side route access based on the permissions returned during login. Backend must still enforce the same permissions on every protected endpoint.

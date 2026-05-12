@@ -1,5 +1,18 @@
 import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from "axios";
-import { makeDevUserFromEmail, normalizeRole, type AuthUser, type UserRole } from "./auth-contract";
+import { getModulesFromPermissions, makeDevUserFromEmail, normalizeRole, rolePermissions, type AuthUser, type PermissionKey, type UserRole } from "./auth-contract";
+import {
+  buildSalarySlip,
+  canGeneratePayrollForEmployee,
+  employeeIdOf,
+  getEmployeeMonthlySalary,
+  getMonthRange,
+  monthName,
+  roundMoney,
+  toNumber,
+  type PayrollGenerationOptions,
+  type PayrollRecord,
+  type PayrollStatus,
+} from "./payroll-utils";
 
 type MockRecord = Record<string, unknown> & { id: number | string };
 
@@ -9,6 +22,8 @@ const STORAGE_KEY = "worksuite_mock_api_store";
 const NETWORK_DELAY_MS = 120;
 
 const now = new Date("2026-05-08T09:00:00+05:00").toISOString();
+const mockChatImage =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='720' height='420' viewBox='0 0 720 420'%3E%3Crect width='720' height='420' rx='36' fill='%2303a9f3'/%3E%3Ccircle cx='594' cy='94' r='92' fill='%23ffffff' fill-opacity='.22'/%3E%3Cpath d='M92 296c94-112 162-126 252-40 54 52 118 64 196 14 38-24 66-26 88-4v82H92z' fill='%23ffffff' fill-opacity='.28'/%3E%3Crect x='84' y='72' width='282' height='42' rx='21' fill='%23ffffff' fill-opacity='.9'/%3E%3Crect x='84' y='138' width='430' height='26' rx='13' fill='%23ffffff' fill-opacity='.62'/%3E%3Crect x='84' y='184' width='338' height='26' rx='13' fill='%23ffffff' fill-opacity='.42'/%3E%3C/svg%3E";
 
 const seedStore: MockStore = {
   companies: [
@@ -49,6 +64,70 @@ const seedStore: MockStore = {
       lastLogin: "2026-04-28",
       admin_name: "Global Admin",
       admin_email: "owner@globalhr.com",
+      created_at: now,
+    },
+  ],
+  admins: [
+    {
+      id: 1,
+      name: "Company Admin",
+      email: "admin@lisam.com",
+      role: "admin",
+      company_id: 1,
+      company: { id: 1, name: "Lisam Solutions", company_name: "Lisam Solutions" },
+      status: "active",
+      permissions: rolePermissions.admin,
+      modules: getModulesFromPermissions(rolePermissions.admin),
+      last_login_at: "2026-05-07T09:30:00+05:00",
+      created_at: now,
+    },
+    {
+      id: 2,
+      name: "HR Admin",
+      email: "hr.admin@lisam.com",
+      role: "admin",
+      company_id: 1,
+      company: { id: 1, name: "Lisam Solutions", company_name: "Lisam Solutions" },
+      status: "active",
+      permissions: [
+        "dashboard.view",
+        "employees.*",
+        "hr.*",
+        "shifts.*",
+        "attendance.*",
+        "leaves.*",
+        "recruitment.*",
+        "reports.view",
+        "reports.export",
+        "events.view",
+        "notices.view",
+        "profile.*",
+      ],
+      modules: ["dashboard", "employees", "hr", "shifts", "attendance", "leaves", "recruitment", "reports", "events", "notices"],
+      last_login_at: "2026-05-06T15:15:00+05:00",
+      created_at: now,
+    },
+    {
+      id: 3,
+      name: "Project Admin",
+      email: "project.admin@prodigy.io",
+      role: "admin",
+      company_id: 2,
+      company: { id: 2, name: "Tech Prodigy", company_name: "Tech Prodigy" },
+      status: "active",
+      permissions: [
+        "dashboard.view",
+        "clients.view",
+        "projects.*",
+        "tasks.*",
+        "tickets.*",
+        "reports.view",
+        "messages.*",
+        "events.view",
+        "profile.*",
+      ],
+      modules: ["dashboard", "clients", "projects", "tasks", "tickets", "reports", "messages", "events"],
+      last_login_at: "2026-05-05T11:10:00+05:00",
       created_at: now,
     },
   ],
@@ -161,6 +240,129 @@ const seedStore: MockStore = {
         address: "77 Business Avenue",
       },
       created_at: now,
+    },
+  ],
+  "chat-conversations": [
+    {
+      id: "direct-employee-2",
+      type: "direct",
+      name: "Jane Smith",
+      participant_keys: ["admin:1", "employee:2"],
+      participants: [
+        { key: "admin:1", id: 1, type: "admin", name: "Company Admin", role: "Admin", avatar: "" },
+        { key: "employee:2", id: 2, type: "employee", name: "Jane Smith", role: "UI Designer", avatar: "" },
+      ],
+      last_message: "Sent the final assets.",
+      last_message_at: "2026-05-08T10:18:00+05:00",
+      unread_by: ["admin:1"],
+      muted_by: [],
+      archived_by: [],
+      created_at: now,
+    },
+    {
+      id: "direct-client-1",
+      type: "direct",
+      name: "Sarah Client",
+      participant_keys: ["admin:1", "client:1"],
+      participants: [
+        { key: "admin:1", id: 1, type: "admin", name: "Company Admin", role: "Admin", avatar: "" },
+        { key: "client:1", id: 1, type: "client", name: "Sarah Client", role: "Northwind Studio", avatar: "" },
+      ],
+      last_message: "The payment proof has been uploaded.",
+      last_message_at: "2026-05-08T09:40:00+05:00",
+      unread_by: [],
+      muted_by: [],
+      archived_by: [],
+      created_at: now,
+    },
+    {
+      id: "group-frontend",
+      type: "group",
+      name: "Frontend Delivery",
+      description: "Frontend delivery room for HRMS releases.",
+      avatar: mockChatImage,
+      participant_keys: ["admin:1", "employee:2", "client:1"],
+      admin_keys: ["admin:1"],
+      created_by: "admin:1",
+      participants: [
+        { key: "admin:1", id: 1, type: "admin", name: "Company Admin", role: "Admin", avatar: "" },
+        { key: "employee:2", id: 2, type: "employee", name: "Jane Smith", role: "UI Designer", avatar: "" },
+        { key: "client:1", id: 1, type: "client", name: "Sarah Client", role: "Client", avatar: "" },
+      ],
+      settings: {
+        only_admins_can_send: false,
+        only_admins_can_edit_info: true,
+        allow_member_uploads: true,
+        disappearing_messages_days: 0,
+      },
+      last_message: "Please review the attached UI reference.",
+      last_message_at: "2026-05-08T11:05:00+05:00",
+      unread_by: [],
+      muted_by: [],
+      archived_by: [],
+      pinned_message_id: "msg-group-2",
+      created_at: now,
+    },
+  ],
+  "chat-messages": [
+    {
+      id: "msg-1",
+      conversation_id: "direct-employee-2",
+      sender_key: "admin:1",
+      sender_name: "Company Admin",
+      body: "Hey Jane, how is the dashboard polish going?",
+      attachments: [],
+      status_by: { "admin:1": "seen", "employee:2": "seen" },
+      reactions: [],
+      created_at: "2026-05-08T10:00:00+05:00",
+    },
+    {
+      id: "msg-2",
+      conversation_id: "direct-employee-2",
+      sender_key: "employee:2",
+      sender_name: "Jane Smith",
+      body: "Almost done. I am checking spacing and mobile states now.",
+      attachments: [],
+      status_by: { "admin:1": "seen", "employee:2": "seen" },
+      reactions: [{ key: "like", count: 1, user_keys: ["admin:1"] }],
+      created_at: "2026-05-08T10:06:00+05:00",
+    },
+    {
+      id: "msg-client-1",
+      conversation_id: "direct-client-1",
+      sender_key: "client:1",
+      sender_name: "Sarah Client",
+      body: "The payment proof has been uploaded.",
+      attachments: [
+        { id: "att-client-1", name: "payment-proof-preview.png", type: "image", url: mockChatImage, size_label: "148 KB" },
+      ],
+      status_by: { "admin:1": "delivered", "client:1": "seen" },
+      reactions: [],
+      created_at: "2026-05-08T09:40:00+05:00",
+    },
+    {
+      id: "msg-group-1",
+      conversation_id: "group-frontend",
+      sender_key: "admin:1",
+      sender_name: "Company Admin",
+      body: "Welcome to the release group. Only admins can create groups, but assigned group admins can manage members.",
+      attachments: [],
+      status_by: { "admin:1": "seen", "employee:2": "seen", "client:1": "delivered" },
+      reactions: [],
+      created_at: "2026-05-08T11:00:00+05:00",
+    },
+    {
+      id: "msg-group-2",
+      conversation_id: "group-frontend",
+      sender_key: "admin:1",
+      sender_name: "Company Admin",
+      body: "Please review the attached UI reference.",
+      attachments: [
+        { id: "att-group-1", name: "login-gradient-reference.png", type: "image", url: mockChatImage, size_label: "210 KB" },
+      ],
+      status_by: { "admin:1": "seen", "employee:2": "delivered", "client:1": "delivered" },
+      reactions: [{ key: "heart", count: 1, user_keys: ["employee:2"] }],
+      created_at: "2026-05-08T11:05:00+05:00",
     },
   ],
   projects: [
@@ -307,9 +509,14 @@ const seedStore: MockStore = {
       id: 1,
       item_name: "Software subscriptions",
       price: 450,
-      status: "pending",
+      amount: 450,
+      status: "approved",
+      can_claim: "yes",
+      user_id: 2,
+      employee_id: 2,
       user: { id: 2, name: "Jane Smith" },
       project: { id: 1, project_name: "HR Portal Migration" },
+      purchase_date: "2026-05-07",
       created_at: now,
     },
   ],
@@ -528,6 +735,224 @@ const seedStore: MockStore = {
       created_at: now,
     },
   ],
+  "payroll-cycles": [
+    { id: 1, cycle: "monthly", name: "Monthly", duration: "calendar_month", status: "active" },
+    { id: 2, cycle: "weekly", name: "Weekly", duration: "7_days", status: "active" },
+    { id: 3, cycle: "biweekly", name: "Biweekly", duration: "14_days", status: "active" },
+    { id: 4, cycle: "semimonthly", name: "Semimonthly", duration: "twice_monthly", status: "active" },
+  ],
+  "salary-components": [
+    {
+      id: 1,
+      component_name: "House Rent Allowance",
+      component_type: "earning",
+      type: "earning",
+      value_type: "percent",
+      component_value: 20,
+      weekly_value: 20,
+      biweekly_value: 20,
+      semimonthly_value: 20,
+      status: "active",
+      created_at: now,
+    },
+    {
+      id: 2,
+      component_name: "Transport Allowance",
+      component_type: "earning",
+      type: "earning",
+      value_type: "fixed",
+      component_value: 300,
+      weekly_value: 75,
+      biweekly_value: 150,
+      semimonthly_value: 150,
+      status: "active",
+      created_at: now,
+    },
+    {
+      id: 3,
+      component_name: "Medical Allowance",
+      component_type: "earning",
+      type: "earning",
+      value_type: "fixed",
+      component_value: 200,
+      weekly_value: 50,
+      biweekly_value: 100,
+      semimonthly_value: 100,
+      status: "active",
+      created_at: now,
+    },
+    {
+      id: 4,
+      component_name: "Provident Fund",
+      component_type: "deduction",
+      type: "deduction",
+      value_type: "percent",
+      component_value: 5,
+      weekly_value: 5,
+      biweekly_value: 5,
+      semimonthly_value: 5,
+      status: "active",
+      created_at: now,
+    },
+    {
+      id: 5,
+      component_name: "Professional Tax",
+      component_type: "deduction",
+      type: "deduction",
+      value_type: "fixed",
+      component_value: 100,
+      weekly_value: 25,
+      biweekly_value: 50,
+      semimonthly_value: 50,
+      status: "active",
+      created_at: now,
+    },
+  ],
+  "salary-groups": [
+    {
+      id: 1,
+      group_name: "Administration Payroll",
+      description: "Default salary structure for HR and administration employees.",
+      components: [1, 2, 3, 4, 5],
+      component_ids: [1, 2, 3, 4, 5],
+      status: "active",
+      created_at: now,
+    },
+    {
+      id: 2,
+      group_name: "Creative Team Payroll",
+      description: "Salary structure for design and project delivery employees.",
+      components: [1, 2, 4],
+      component_ids: [1, 2, 4],
+      status: "active",
+      created_at: now,
+    },
+  ],
+  "employee-salaries": [
+    { id: 1, user_id: 1, employee_id: 1, amount: 6500, type: "initial", date: "2023-01-15", allow_generate_payroll: "yes", created_at: now },
+    { id: 2, user_id: 2, employee_id: 2, amount: 5200, type: "initial", date: "2023-03-20", allow_generate_payroll: "yes", created_at: now },
+    { id: 3, user_id: 2, employee_id: 2, amount: 350, type: "increment", date: "2026-01-01", allow_generate_payroll: "yes", created_at: now },
+    { id: 4, user_id: 3, employee_id: 3, amount: 4700, type: "initial", date: "2022-11-01", allow_generate_payroll: "yes", created_at: now },
+  ],
+  "employee-salary-groups": [
+    { id: 1, user_id: 1, employee_id: 1, salary_group_id: 1, created_at: now },
+    { id: 2, user_id: 2, employee_id: 2, salary_group_id: 2, created_at: now },
+    { id: 3, user_id: 3, employee_id: 3, salary_group_id: 1, created_at: now },
+  ],
+  "employee-payroll-cycles": [
+    { id: 1, user_id: 1, employee_id: 1, payroll_cycle_id: 1, created_at: now },
+    { id: 2, user_id: 2, employee_id: 2, payroll_cycle_id: 1, created_at: now },
+    { id: 3, user_id: 3, employee_id: 3, payroll_cycle_id: 1, created_at: now },
+  ],
+  "salary-tds": [
+    { id: 1, salary_from: 0, salary_to: 60000, salary_percent: 0, created_at: now },
+    { id: 2, salary_from: 60001, salary_to: 100000, salary_percent: 4, created_at: now },
+    { id: 3, salary_from: 100001, salary_to: 250000, salary_percent: 7.5, created_at: now },
+  ],
+  "salary-payment-methods": [
+    { id: 1, payment_method: "Bank Transfer", is_default: true, status: "active", created_at: now },
+    { id: 2, payment_method: "Cash", is_default: false, status: "active", created_at: now },
+    { id: 3, payment_method: "Cheque", is_default: false, status: "active", created_at: now },
+  ],
+  "payroll-settings": [
+    {
+      id: 1,
+      tds_status: "yes",
+      finance_month: "04",
+      tds_salary: 60000,
+      extra_fields: [
+        { label: "Employee Code", key: "employee_code", enabled: true },
+        { label: "Department", key: "department", enabled: true },
+      ],
+      created_at: now,
+    },
+  ],
+  payroll: [
+    {
+      id: 1,
+      user_id: 1,
+      employee_id: 1,
+      employee: { id: 1, name: "John Doe", employee_detail: { designation: { name: "Company Admin" }, department: { name: "Administration" } } },
+      user: { id: 1, name: "John Doe" },
+      salary_group_id: 1,
+      payroll_cycle_id: 1,
+      basic_salary: 6500,
+      monthly_salary: 6500,
+      gross_salary: 8200,
+      total_deductions: 425,
+      net_salary: 7775,
+      month: 4,
+      month_name: "April",
+      year: 2026,
+      salary_from: "2026-04-01",
+      salary_to: "2026-04-30",
+      pay_days: 30,
+      working_days: 30,
+      present_days: 30,
+      leave_days: 0,
+      absent_days: 0,
+      holiday_days: 0,
+      expense_claims: 0,
+      timelog_earnings: 0,
+      tds: 0,
+      status: "paid",
+      paid_on: "2026-05-05",
+      salary_payment_method_id: 1,
+      salary_json: {
+        earnings: [
+          { id: 1, title: "House Rent Allowance", type: "earning", value_type: "percent", amount: 1300 },
+          { id: 2, title: "Transport Allowance", type: "earning", value_type: "fixed", amount: 300 },
+          { id: 3, title: "Medical Allowance", type: "earning", value_type: "fixed", amount: 200 },
+        ],
+        deductions: [
+          { id: 4, title: "Provident Fund", type: "deduction", value_type: "percent", amount: 325 },
+          { id: 5, title: "Professional Tax", type: "deduction", value_type: "fixed", amount: 100 },
+        ],
+        attendance_summary: { total_days: 30, working_days: 30, present_days: 30, leave_days: 0, absent_days: 0, holiday_days: 0, pay_days: 30 },
+      },
+      created_at: now,
+    },
+    {
+      id: 2,
+      user_id: 2,
+      employee_id: 2,
+      employee: { id: 2, name: "Jane Smith", employee_detail: { designation: { name: "UI Designer" }, department: { name: "Design" } } },
+      user: { id: 2, name: "Jane Smith" },
+      salary_group_id: 2,
+      payroll_cycle_id: 1,
+      basic_salary: 5550,
+      monthly_salary: 5550,
+      gross_salary: 6960,
+      total_deductions: 278,
+      net_salary: 6682,
+      month: 4,
+      month_name: "April",
+      year: 2026,
+      salary_from: "2026-04-01",
+      salary_to: "2026-04-30",
+      pay_days: 30,
+      working_days: 30,
+      present_days: 30,
+      leave_days: 0,
+      absent_days: 0,
+      holiday_days: 0,
+      expense_claims: 0,
+      timelog_earnings: 0,
+      tds: 0,
+      status: "review",
+      salary_json: {
+        earnings: [
+          { id: 1, title: "House Rent Allowance", type: "earning", value_type: "percent", amount: 1110 },
+          { id: 2, title: "Transport Allowance", type: "earning", value_type: "fixed", amount: 300 },
+        ],
+        deductions: [
+          { id: 4, title: "Provident Fund", type: "deduction", value_type: "percent", amount: 278 },
+        ],
+        attendance_summary: { total_days: 30, working_days: 30, present_days: 30, leave_days: 0, absent_days: 0, holiday_days: 0, pay_days: 30 },
+      },
+      created_at: now,
+    },
+  ],
   "employee-docs": [
     { id: 1, user_id: 1, employee_id: 1, name: "Joining Letter.pdf", file_url: "#", size: "850 KB", created_at: "2026-04-02T09:00:00+05:00" },
     { id: 2, user_id: 2, employee_id: 2, name: "ID Proof.pdf", file_url: "#", size: "1.2 MB", created_at: "2026-04-10T09:00:00+05:00" },
@@ -720,11 +1145,27 @@ const textIncludes = (record: MockRecord, query: string) => JSON.stringify(recor
 const filterRecords = (records: MockRecord[], searchParams: URLSearchParams) => {
   const search = (searchParams.get("search") || "").toLowerCase();
   const status = searchParams.get("status");
+  const month = searchParams.get("month");
+  const year = searchParams.get("year");
+  const cycle = searchParams.get("cycle") || searchParams.get("payroll_cycle_id");
+  const employeeId = searchParams.get("employee_id") || searchParams.get("user_id");
+  const departmentId = searchParams.get("department_id");
+  const designationId = searchParams.get("designation_id");
 
   return records.filter((record) => {
     const searchMatch = !search || textIncludes(record, search);
     const statusMatch = !status || status === "all" || String(record.status) === status;
-    return searchMatch && statusMatch;
+    const monthMatch = !month || String(record.month) === month;
+    const yearMatch = !year || String(record.year) === year;
+    const cycleMatch = !cycle || String(record.payroll_cycle_id || record.cycle_id || record.cycle) === cycle;
+    const employeeMatch = !employeeId || String(record.employee_id || record.user_id || getNestedId(record.employee) || getNestedId(record.user)) === employeeId;
+    const employee = getNestedObject(record.employee) || getNestedObject(record.user);
+    const detail = getNestedObject(employee?.employee_detail);
+    const department = getNestedObject(detail?.department);
+    const designation = getNestedObject(detail?.designation);
+    const departmentMatch = !departmentId || String(detail?.department_id || department?.id || record.department_id) === departmentId;
+    const designationMatch = !designationId || String(detail?.designation_id || designation?.id || record.designation_id) === designationId;
+    return searchMatch && statusMatch && monthMatch && yearMatch && cycleMatch && employeeMatch && departmentMatch && designationMatch;
   });
 };
 
@@ -837,18 +1278,60 @@ const makeClientPayload = (payload: Record<string, unknown>, id: number): MockRe
   };
 };
 
-const makeCompanyPayload = (payload: Record<string, unknown>, id: number): MockRecord => ({
-  id,
-  ...payload,
-  name: String(payload.company_name || payload.name || `Company ${id}`),
-  company_name: String(payload.company_name || payload.name || `Company ${id}`),
-  email: String(payload.email || payload.admin_email || `company-${id}@example.com`),
-  package: String(payload.package || "Trial"),
-  package_type: String(payload.package_type || "monthly"),
-  status: String(payload.status || "active"),
-  lastLogin: new Date().toISOString().slice(0, 10),
-  created_at: new Date().toISOString(),
-});
+const makeCompanyPayload = (payload: Record<string, unknown>, id: number): MockRecord => {
+  const companyPayload = getNestedObject(payload.company);
+  const flatPayload = Object.keys(companyPayload).length ? companyPayload : payload;
+
+  return {
+    id,
+    ...flatPayload,
+    name: String(flatPayload.company_name || flatPayload.name || `Company ${id}`),
+    company_name: String(flatPayload.company_name || flatPayload.name || `Company ${id}`),
+    email: String(flatPayload.email || payload.admin_email || `company-${id}@example.com`),
+    phone: String(flatPayload.phone || ""),
+    website: String(flatPayload.website || ""),
+    package: String(flatPayload.package || "Trial"),
+    package_type: String(flatPayload.package_type || "monthly"),
+    status: String(flatPayload.status || "active"),
+    lastLogin: new Date().toISOString().slice(0, 10),
+    created_at: new Date().toISOString(),
+  };
+};
+
+const normalizePermissionList = (value: unknown, fallback: PermissionKey[] = rolePermissions.admin) => {
+  if (!Array.isArray(value)) return fallback;
+  return value.map((permission) => String(permission)).filter(Boolean) as PermissionKey[];
+};
+
+const makeAdminPayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const { password: _password, ...safePayload } = payload;
+  const companyId = getNestedId(payload.company) || payload.company_id || existing?.company_id || 1;
+  const company = store.companies.find((record) => String(record.id) === String(companyId));
+  const permissions = normalizePermissionList(payload.permissions, normalizePermissionList(existing?.permissions, rolePermissions.admin));
+
+  return {
+    ...(existing || {}),
+    id,
+    ...safePayload,
+    name: String(payload.name || existing?.name || `Admin ${id}`),
+    email: String(payload.email || existing?.email || `admin-${id}@company.test`),
+    role: "admin",
+    company_id: companyId,
+    company: company
+      ? {
+          id: company.id,
+          name: company.name,
+          company_name: company.company_name || company.name,
+        }
+      : payload.company || existing?.company,
+    status: String(payload.status || existing?.status || "active"),
+    permissions,
+    modules: getModulesFromPermissions(permissions),
+    last_login_at: existing?.last_login_at || null,
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+};
 
 const getNestedId = (value: unknown) => {
   if (!value || typeof value !== "object") return value;
@@ -1018,15 +1501,168 @@ const makeLeavePayload = (store: MockStore, payload: Record<string, unknown>, id
   };
 };
 
+const makeSalaryComponentPayload = (payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const componentType = String(payload.component_type || payload.type || existing?.component_type || "earning");
+  const valueType = String(payload.value_type || existing?.value_type || "fixed");
+
+  return {
+    ...(existing || {}),
+    id,
+    ...payload,
+    component_name: String(payload.component_name || payload.name || existing?.component_name || `Component ${id}`),
+    component_type: componentType,
+    type: componentType,
+    value_type: valueType,
+    component_value: toNumber(payload.component_value ?? payload.value ?? existing?.component_value),
+    weekly_value: toNumber(payload.weekly_value ?? existing?.weekly_value ?? payload.component_value ?? payload.value),
+    biweekly_value: toNumber(payload.biweekly_value ?? existing?.biweekly_value ?? payload.component_value ?? payload.value),
+    semimonthly_value: toNumber(payload.semimonthly_value ?? existing?.semimonthly_value ?? payload.component_value ?? payload.value),
+    status: String(payload.status || existing?.status || "active"),
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+};
+
+const normalizeIdList = (value: unknown) => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => getNestedId(item)).filter((item) => item !== undefined && item !== null && item !== "");
+};
+
+const makeSalaryGroupPayload = (payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const componentIds = normalizeIdList(payload.component_ids).length
+    ? normalizeIdList(payload.component_ids)
+    : normalizeIdList(payload.components).length
+      ? normalizeIdList(payload.components)
+      : Array.isArray(existing?.component_ids)
+        ? existing.component_ids
+        : [];
+
+  return {
+    ...(existing || {}),
+    id,
+    ...payload,
+    group_name: String(payload.group_name || payload.name || existing?.group_name || `Salary Group ${id}`),
+    description: String(payload.description || existing?.description || ""),
+    components: componentIds,
+    component_ids: componentIds,
+    status: String(payload.status || existing?.status || "active"),
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+};
+
+const makeEmployeeSalaryPayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const employeeId = payload.employee_id || payload.user_id || getNestedId(payload.employee) || getNestedId(payload.user) || existing?.employee_id;
+  const employee = store.employees.find((record) => String(record.id) === String(employeeId));
+
+  return {
+    ...(existing || {}),
+    id,
+    ...payload,
+    user_id: employeeId || null,
+    employee_id: employeeId || null,
+    employee: employee ? { id: employee.id, name: employee.name, employee_detail: employee.employee_detail } : payload.employee || existing?.employee,
+    amount: toNumber(payload.amount ?? existing?.amount),
+    type: String(payload.type || existing?.type || "initial"),
+    date: String(payload.date || existing?.date || new Date().toISOString().slice(0, 10)),
+    allow_generate_payroll: String(payload.allow_generate_payroll || existing?.allow_generate_payroll || "yes"),
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+};
+
+const makeEmployeeSalaryGroupPayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const employeeId = payload.employee_id || payload.user_id || getNestedId(payload.employee) || existing?.employee_id;
+  const salaryGroupId = payload.salary_group_id || getNestedId(payload.salary_group) || existing?.salary_group_id || null;
+  const employee = store.employees.find((record) => String(record.id) === String(employeeId));
+  const salaryGroup = store["salary-groups"].find((record) => String(record.id) === String(salaryGroupId));
+
+  return {
+    ...(existing || {}),
+    id,
+    ...payload,
+    user_id: employeeId || null,
+    employee_id: employeeId || null,
+    salary_group_id: salaryGroupId,
+    employee: employee ? { id: employee.id, name: employee.name } : payload.employee || existing?.employee,
+    salary_group: salaryGroup ? { id: salaryGroup.id, group_name: salaryGroup.group_name } : payload.salary_group || existing?.salary_group,
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+};
+
+const makeEmployeePayrollCyclePayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const employeeId = payload.employee_id || payload.user_id || getNestedId(payload.employee) || existing?.employee_id;
+  const payrollCycleId = payload.payroll_cycle_id || getNestedId(payload.payroll_cycle) || existing?.payroll_cycle_id || 1;
+  const employee = store.employees.find((record) => String(record.id) === String(employeeId));
+  const payrollCycle = store["payroll-cycles"].find((record) => String(record.id) === String(payrollCycleId));
+
+  return {
+    ...(existing || {}),
+    id,
+    ...payload,
+    user_id: employeeId || null,
+    employee_id: employeeId || null,
+    payroll_cycle_id: payrollCycleId,
+    employee: employee ? { id: employee.id, name: employee.name } : payload.employee || existing?.employee,
+    payroll_cycle: payrollCycle ? { id: payrollCycle.id, name: payrollCycle.name, cycle: payrollCycle.cycle } : payload.payroll_cycle || existing?.payroll_cycle,
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+};
+
+const makeSalaryTdsPayload = (payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => ({
+  ...(existing || {}),
+  id,
+  ...payload,
+  salary_from: toNumber(payload.salary_from ?? existing?.salary_from),
+  salary_to: toNumber(payload.salary_to ?? existing?.salary_to),
+  salary_percent: toNumber(payload.salary_percent ?? existing?.salary_percent),
+  created_at: existing?.created_at || new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
+
+const makeSalaryPaymentMethodPayload = (payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => ({
+  ...(existing || {}),
+  id,
+  ...payload,
+  payment_method: String(payload.payment_method || payload.name || existing?.payment_method || `Payment Method ${id}`),
+  is_default: payload.is_default ?? existing?.is_default ?? false,
+  status: String(payload.status || existing?.status || "active"),
+  created_at: existing?.created_at || new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
+
+const makePayrollSettingPayload = (payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => ({
+  ...(existing || {}),
+  id,
+  ...payload,
+  tds_status: String(payload.tds_status || existing?.tds_status || "no"),
+  finance_month: String(payload.finance_month || existing?.finance_month || "04"),
+  tds_salary: toNumber(payload.tds_salary ?? existing?.tds_salary),
+  extra_fields: Array.isArray(payload.extra_fields) ? payload.extra_fields : existing?.extra_fields || [],
+  created_at: existing?.created_at || new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
+
 const makeGenericPayload = (store: MockStore, resource: string, payload: Record<string, unknown>, id: number): MockRecord => {
   if (resource === "clients") return makeClientPayload(payload, id);
   if (resource === "employees") return makeEmployeePayload(store, payload, id);
   if (resource === "companies") return makeCompanyPayload(payload, id);
+  if (resource === "admins") return makeAdminPayload(store, payload, id);
   if (resource === "projects") return makeProjectPayload(store, payload, id);
   if (resource === "tasks") return makeTaskPayload(store, payload, id);
   if (resource === "tickets") return makeTicketPayload(store, payload, id);
   if (resource === "attendance") return makeAttendancePayload(store, payload, id);
   if (resource === "leaves") return makeLeavePayload(store, payload, id);
+  if (resource === "salary-components") return makeSalaryComponentPayload(payload, id);
+  if (resource === "salary-groups") return makeSalaryGroupPayload(payload, id);
+  if (resource === "employee-salaries") return makeEmployeeSalaryPayload(store, payload, id);
+  if (resource === "employee-salary-groups") return makeEmployeeSalaryGroupPayload(store, payload, id);
+  if (resource === "employee-payroll-cycles") return makeEmployeePayrollCyclePayload(store, payload, id);
+  if (resource === "salary-tds") return makeSalaryTdsPayload(payload, id);
+  if (resource === "salary-payment-methods") return makeSalaryPaymentMethodPayload(payload, id);
+  if (resource === "payroll-settings") return makePayrollSettingPayload(payload, id);
   if (["invoices", "estimates", "proposals", "payments", "expenses"].includes(resource)) {
     return makeFinancePayload(store, resource, payload, id);
   }
@@ -1039,25 +1675,41 @@ const makeGenericPayload = (store: MockStore, resource: string, payload: Record<
   };
 };
 
-const login = (payload: Record<string, unknown>) => {
+const login = (store: MockStore, payload: Record<string, unknown>) => {
   const email = String(payload.email || "admin@company.com");
-  const user = makeDevUserFromEmail(email);
+  const admin = (store.admins || []).find((record) => String(record.email || "").toLowerCase() === email.toLowerCase());
+  const adminCompanyId = typeof admin?.company_id === "string" || typeof admin?.company_id === "number" ? admin.company_id : null;
+  const user: AuthUser = admin
+    ? {
+        id: admin.id,
+        name: String(admin.name || "Admin"),
+        email: String(admin.email || email),
+        role: "admin",
+        company_id: adminCompanyId,
+        permissions: normalizePermissionList(admin.permissions, []),
+        modules: Array.isArray(admin.modules) ? (admin.modules as string[]) : getModulesFromPermissions(normalizePermissionList(admin.permissions, [])),
+      }
+    : makeDevUserFromEmail(email);
   const token = `mock_${user.role}_${Date.now()}`;
 
   return apiEnvelope<{ token: string; user: AuthUser }>({ token, user }, "Login successful");
 };
 
-const loginAsCompany = (company: MockRecord) => {
+const loginAsCompany = (store: MockStore, company: MockRecord) => {
   const companyName = String(company.company_name || company.name || "Company");
+  const companyAdmin = (store.admins || []).find(
+    (record) => String(record.company_id) === String(company.id) && String(record.status || "active") === "active",
+  );
+  const adminPermissions = normalizePermissionList(companyAdmin?.permissions, rolePermissions.admin);
   const user: AuthUser = {
-    id: `company-admin-${company.id}`,
-    name: `${companyName} Admin`,
-    email: String(company.admin_email || company.email || `admin-${company.id}@company.test`),
+    id: companyAdmin?.id || `company-admin-${company.id}`,
+    name: String(companyAdmin?.name || `${companyName} Admin`),
+    email: String(companyAdmin?.email || company.admin_email || company.email || `admin-${company.id}@company.test`),
     role: "admin",
     company_id: company.id,
     impersonator_role: "super_admin",
-    permissions: ["admin.*"],
-    modules: ["hr", "work", "finance", "tickets", "messages", "settings"],
+    permissions: adminPermissions,
+    modules: getModulesFromPermissions(adminPermissions),
   };
 
   return apiEnvelope<{ token: string; user: AuthUser }>({
@@ -1081,6 +1733,163 @@ const updateRecordForAction = (record: MockRecord, action: string, payload: Reco
   };
 };
 
+const truthyPayload = (payload: Record<string, unknown>, keys: string[], fallback = false) => {
+  const found = keys.map((key) => payload[key]).find((value) => value !== undefined);
+  if (found === undefined) return fallback;
+  if (typeof found === "boolean") return found;
+  return ["yes", "true", "1", "on"].includes(String(found).toLowerCase());
+};
+
+const normalizePayrollOptions = (payload: Record<string, unknown>): PayrollGenerationOptions => ({
+  useAttendance: truthyPayload(payload, ["useAttendance", "use_attendance"], true),
+  markApprovedLeavesPaid: truthyPayload(payload, ["markApprovedLeavesPaid", "markLeavesPaid", "mark_leaves_paid", "markApprovedLeavesPaid"], true),
+  markAbsentUnpaid: truthyPayload(payload, ["markAbsentUnpaid", "mark_absent_unpaid"], false),
+  includeExpenseClaims: truthyPayload(payload, ["includeExpenseClaims", "include_expense_claims"], true),
+  addTimelogs: truthyPayload(payload, ["addTimelogs", "add_timelogs"], false),
+});
+
+const normalizeIdArray = (value: unknown) => {
+  if (Array.isArray(value)) return value.map((item) => String(getNestedId(item))).filter(Boolean);
+  if (typeof value === "string" && value.trim()) return value.split(",").map((item) => item.trim()).filter(Boolean);
+  return [];
+};
+
+const buildCycleRanges = (cycleId: number | string, year: number, month: number, payrollCycles: MockRecord[]) => {
+  const cycle = payrollCycles.find((record) => String(record.id) === String(cycleId)) || payrollCycles[0];
+  const range = getMonthRange(year, month);
+  const cycleName = String(cycle?.cycle || cycle?.name || "monthly").toLowerCase();
+
+  if (cycleName.includes("semi")) {
+    const mid = `${year}-${String(month).padStart(2, "0")}-15`;
+    return [
+      { label: `${monthName(month)} 1-15`, salary_from: range.start, salary_to: mid },
+      { label: `${monthName(month)} 16-${range.days}`, salary_from: `${year}-${String(month).padStart(2, "0")}-16`, salary_to: range.end },
+    ];
+  }
+
+  if (cycleName.includes("week")) {
+    const chunk = cycleName.includes("bi") ? 14 : 7;
+    const ranges = [];
+    for (let day = 1; day <= range.days; day += chunk) {
+      const startDay = day;
+      const endDay = Math.min(range.days, day + chunk - 1);
+      const start = `${year}-${String(month).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
+      const end = `${year}-${String(month).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
+      ranges.push({ label: `${monthName(month)} ${startDay}-${endDay}`, salary_from: start, salary_to: end });
+    }
+    return ranges;
+  }
+
+  return [{ label: `${monthName(month)} ${year}`, salary_from: range.start, salary_to: range.end }];
+};
+
+const generatePayrollSlips = (store: MockStore, payload: Record<string, unknown>) => {
+  const year = toNumber(payload.year, new Date().getFullYear());
+  const month = toNumber(payload.month, new Date().getMonth() + 1);
+  const period = getMonthRange(year, month);
+  const startDate = String(payload.salary_from || payload.start_date || period.start);
+  const endDate = String(payload.salary_to || payload.end_date || period.end);
+  const payrollCycleId = payload.payroll_cycle_id || payload.payroll_cycle || payload.cycle || 1;
+  const requestedIds = normalizeIdArray(payload.userIds || payload.user_ids || payload.employee_ids || payload.employeeIds);
+  const options = normalizePayrollOptions(payload);
+  const existingSlips = getResourceRecords(store, "payroll");
+  const nextSlipId = nextId(existingSlips);
+  const eligibleEmployees = (store.employees || [])
+    .filter((employee) => !requestedIds.length || requestedIds.includes(String(employeeIdOf(employee as PayrollRecord))))
+    .filter((employee) => {
+      const employeeCycle = (store["employee-payroll-cycles"] || []).find((record) => String(employeeIdOf(record as PayrollRecord)) === String(employee.id));
+      return String(employeeCycle?.payroll_cycle_id || 1) === String(payrollCycleId);
+    });
+
+  const skipped: Array<{ id: number | string | undefined; name: unknown; reason: string }> = [];
+  const generated = eligibleEmployees
+    .map((employee, index) => {
+      const readiness = canGeneratePayrollForEmployee(employee as PayrollRecord, store["employee-salaries"] || [], store["employee-salary-groups"] || []);
+      if (!readiness.ok) {
+        skipped.push({ id: employee.id, name: employee.name, reason: readiness.reason });
+        return null;
+      }
+
+      return buildSalarySlip({
+        employee: employee as PayrollRecord,
+        salaryRecords: (store["employee-salaries"] || []) as PayrollRecord[],
+        salaryGroups: (store["salary-groups"] || []) as PayrollRecord[],
+        salaryComponents: (store["salary-components"] || []) as PayrollRecord[],
+        employeeSalaryGroups: (store["employee-salary-groups"] || []) as PayrollRecord[],
+        employeePayrollCycles: (store["employee-payroll-cycles"] || []) as PayrollRecord[],
+        payrollCycles: (store["payroll-cycles"] || []) as PayrollRecord[],
+        attendance: (store.attendance || []) as PayrollRecord[],
+        leaves: (store.leaves || []) as PayrollRecord[],
+        holidays: (store.holidays || []) as PayrollRecord[],
+        expenses: (store.expenses || []) as PayrollRecord[],
+        timeLogs: (store["time-logs"] || []) as PayrollRecord[],
+        settings: (store["payroll-settings"] || [])[0] as PayrollRecord | undefined,
+        salaryTds: (store["salary-tds"] || []) as PayrollRecord[],
+        year,
+        month,
+        startDate,
+        endDate,
+        options,
+        id: nextSlipId + index,
+      }) as MockRecord;
+    })
+    .filter(Boolean) as MockRecord[];
+
+  const generatedKeys = new Set(generated.map((slip) => `${slip.employee_id}-${slip.year}-${slip.month}-${slip.payroll_cycle_id}-${slip.salary_from}-${slip.salary_to}`));
+  const preserved = existingSlips.filter(
+    (slip) => !generatedKeys.has(`${slip.employee_id}-${slip.year}-${slip.month}-${slip.payroll_cycle_id}-${slip.salary_from}-${slip.salary_to}`),
+  );
+  setResourceRecords(store, "payroll", [...generated, ...preserved]);
+
+  return {
+    generated,
+    skipped,
+    period: { year, month, salary_from: startDate, salary_to: endDate, payroll_cycle_id: payrollCycleId },
+  };
+};
+
+const updatePayrollStatuses = (store: MockStore, payload: Record<string, unknown>) => {
+  const ids = normalizeIdArray(payload.ids || payload.salary_slip_ids || payload.payroll_ids || payload.selected_ids);
+  const status = String(payload.status || "generated") as PayrollStatus;
+  const paidOn = String(payload.paid_on || new Date().toISOString().slice(0, 10));
+  const paymentMethodId = payload.salary_payment_method_id || payload.payment_method_id || null;
+  const records = getResourceRecords(store, "payroll");
+  let updatedTotal = 0;
+  const updated = records.map((record) => {
+    if (!ids.includes(String(record.id))) return record;
+    updatedTotal += toNumber(record.net_salary);
+    return {
+      ...record,
+      status,
+      paid_on: status === "paid" ? paidOn : record.paid_on || null,
+      salary_payment_method_id: status === "paid" ? paymentMethodId : record.salary_payment_method_id || null,
+      updated_at: new Date().toISOString(),
+    };
+  });
+
+  setResourceRecords(store, "payroll", updated);
+
+  if (status === "paid" && truthyPayload(payload, ["add_expenses", "addExpenses"], false) && updatedTotal > 0) {
+    const expenseRecords = getResourceRecords(store, "expenses");
+    const expense = makeFinancePayload(
+      store,
+      "expenses",
+      {
+        item_name: `Payroll salary expense ${paidOn}`,
+        price: roundMoney(updatedTotal),
+        amount: roundMoney(updatedTotal),
+        status: "approved",
+        purchase_date: paidOn,
+        can_claim: "no",
+      },
+      nextId(expenseRecords),
+    );
+    setResourceRecords(store, "expenses", [expense, ...expenseRecords]);
+  }
+
+  return updated.filter((record) => ids.includes(String(record.id)));
+};
+
 const requireRole = (config: InternalAxiosRequestConfig, role: UserRole) => {
   const token = String(config.headers.Authorization || "");
   return token.includes(role) || !token;
@@ -1098,7 +1907,7 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
   const store = readStore();
 
   if (resource === "auth" && id === "login" && method === "post") {
-    return jsonResponse(config, 200, login(payload));
+    return jsonResponse(config, 200, login(store, payload));
   }
 
   if (!resource) {
@@ -1129,6 +1938,10 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
     }
   }
 
+  if (resource === "admins" && !requireRole(config, "super_admin")) {
+    return jsonResponse(config, 403, { success: false, message: "Only super admins can manage company admins." });
+  }
+
   const records = getResourceRecords(store, resource);
 
   if (resource === "companies" && method === "post" && id && action === "login") {
@@ -1136,7 +1949,37 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
       return jsonResponse(config, 403, { success: false, message: "Only super admins can login as a company." });
     }
     const company = records.find((item) => String(item.id) === id);
-    return jsonResponse(config, company ? 200 : 404, company ? loginAsCompany(company) : { success: false, message: "Company not found" });
+    return jsonResponse(config, company ? 200 : 404, company ? loginAsCompany(store, company) : { success: false, message: "Company not found" });
+  }
+
+  if (resource === "payroll" && method === "post" && id === "generate") {
+    const result = generatePayrollSlips(store, payload);
+    return jsonResponse(config, 200, apiEnvelope(result, `${result.generated.length} payslip(s) generated`));
+  }
+
+  if (resource === "payroll" && method === "post" && (id === "update-status" || id === "updateStatus")) {
+    const updated = updatePayrollStatuses(store, payload);
+    return jsonResponse(config, 200, apiEnvelope(updated, "Payroll status updated"));
+  }
+
+  if (resource === "payroll" && method === "post" && id === "cycle-data") {
+    const year = toNumber(payload.year, new Date().getFullYear());
+    const month = toNumber(payload.month, new Date().getMonth() + 1);
+    const payrollCycleId = String(payload.payroll_cycle_id || payload.payroll_cycle || payload.cycle || 1);
+    return jsonResponse(config, 200, apiEnvelope(buildCycleRanges(payrollCycleId, year, month, store["payroll-cycles"] || [])));
+  }
+
+  if (resource === "employee-salaries" && method === "post" && id === "status") {
+    const employeeId = payload.employee_id || payload.user_id;
+    const allow = String(payload.allow_generate_payroll || payload.status || "yes");
+    const salaryRecords = getResourceRecords(store, "employee-salaries");
+    const updated = salaryRecords.map((record) =>
+      String(employeeIdOf(record as PayrollRecord)) === String(employeeId)
+        ? { ...record, allow_generate_payroll: allow, updated_at: new Date().toISOString() }
+        : record,
+    );
+    setResourceRecords(store, "employee-salaries", updated);
+    return jsonResponse(config, 200, apiEnvelope(updated.filter((record) => String(employeeIdOf(record as PayrollRecord)) === String(employeeId)), "Payroll status updated"));
   }
 
   if (method === "get" && !id) {
@@ -1160,17 +2003,41 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
   if (method === "post" && !id) {
     const created = makeGenericPayload(store, resource, payload, nextId(records));
     setResourceRecords(store, resource, [created, ...records]);
+    if (resource === "companies") {
+      const adminPayload = getNestedObject(payload.admin);
+      if (adminPayload.name || adminPayload.email) {
+        const adminRecords = getResourceRecords(store, "admins");
+        const admin = makeAdminPayload(
+          { ...store, companies: [created, ...records] },
+          {
+            ...adminPayload,
+            company_id: created.id,
+            role: "admin",
+            permissions: normalizePermissionList(adminPayload.permissions, rolePermissions.admin),
+          },
+          nextId(adminRecords),
+        );
+        setResourceRecords(store, "admins", [admin, ...adminRecords]);
+      }
+    }
     return jsonResponse(config, 201, apiEnvelope(created, "Created successfully"));
   }
 
   if ((method === "put" || method === "patch") && id) {
-    const updatedRecords = records.map((record) =>
-      String(record.id) === id
-        ? resource === "employees"
-          ? { ...makeEmployeePayload(store, payload, record.id, record), updated_at: new Date().toISOString() }
-          : { ...record, ...payload, updated_at: new Date().toISOString() }
-        : record,
-    );
+    const updatedRecords = records.map((record) => {
+      if (String(record.id) !== id) return record;
+      if (resource === "employees") return { ...makeEmployeePayload(store, payload, record.id, record), updated_at: new Date().toISOString() };
+      if (resource === "admins") return makeAdminPayload(store, payload, record.id, record);
+      if (resource === "salary-components") return makeSalaryComponentPayload(payload, record.id, record);
+      if (resource === "salary-groups") return makeSalaryGroupPayload(payload, record.id, record);
+      if (resource === "employee-salaries") return makeEmployeeSalaryPayload(store, payload, record.id, record);
+      if (resource === "employee-salary-groups") return makeEmployeeSalaryGroupPayload(store, payload, record.id, record);
+      if (resource === "employee-payroll-cycles") return makeEmployeePayrollCyclePayload(store, payload, record.id, record);
+      if (resource === "salary-tds") return makeSalaryTdsPayload(payload, record.id, record);
+      if (resource === "salary-payment-methods") return makeSalaryPaymentMethodPayload(payload, record.id, record);
+      if (resource === "payroll-settings") return makePayrollSettingPayload(payload, record.id, record);
+      return { ...record, ...payload, updated_at: new Date().toISOString() };
+    });
     setResourceRecords(store, resource, updatedRecords);
     const updated = updatedRecords.find((record) => String(record.id) === id);
     return jsonResponse(config, updated ? 200 : 404, updated ? apiEnvelope(updated, "Updated successfully") : { success: false, message: "Record not found" });

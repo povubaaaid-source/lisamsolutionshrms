@@ -20,7 +20,7 @@ export const saveSession = (token: string, user: AuthUser, remember = false) => 
   const normalizedUser: AuthUser = {
     ...user,
     role: normalizeRole(user.role),
-    permissions: user.permissions?.length ? user.permissions : rolePermissions[normalizeRole(user.role)],
+    permissions: Array.isArray(user.permissions) ? user.permissions : rolePermissions[normalizeRole(user.role)],
   };
 
   Cookies.set(TOKEN_COOKIE, token, { expires });
@@ -49,7 +49,7 @@ export const getStoredUser = (): AuthUser | null => {
     return {
       ...parsedUser,
       role,
-      permissions: parsedUser.permissions?.length ? parsedUser.permissions : rolePermissions[role],
+      permissions: Array.isArray(parsedUser.permissions) ? parsedUser.permissions : rolePermissions[role],
     };
   } catch {
     clearSession();

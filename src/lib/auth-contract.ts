@@ -1,10 +1,105 @@
+import { isSaasBillingEnabled, isSaasBillingPath } from "./product-config";
+
 export type UserRole = "super_admin" | "admin" | "employee" | "client";
 
 export type PermissionAction = "view" | "create" | "edit" | "delete" | "approve" | "export" | "manage";
 
+export type PermissionModuleKey =
+  | "dashboard"
+  | "company"
+  | "settings"
+  | "roles"
+  | "employees"
+  | "clients"
+  | "hr"
+  | "shifts"
+  | "attendance"
+  | "leaves"
+  | "projects"
+  | "tasks"
+  | "finance"
+  | "payroll"
+  | "tickets"
+  | "recruitment"
+  | "reports"
+  | "messages"
+  | "events"
+  | "notices"
+  | "leads"
+  | "contracts"
+  | "products"
+  | "billing"
+  | "faq"
+  | "profile";
+
 export type PermissionKey =
   | "*"
-  | `${"company" | "settings" | "roles" | "employees" | "clients" | "hr" | "shifts" | "attendance" | "leaves" | "projects" | "tasks" | "finance" | "payroll" | "tickets" | "recruitment" | "reports" | "messages" | "events" | "notices" | "profile"}.${PermissionAction | "*"}`;
+  | `${PermissionModuleKey}.${PermissionAction | "*"}`;
+
+export type PermissionModuleDefinition = {
+  key: PermissionModuleKey;
+  label: string;
+  group: "core" | "hr" | "work" | "finance" | "communication" | "settings";
+  actions: PermissionAction[];
+};
+
+export const permissionActions: PermissionAction[] = ["view", "create", "edit", "delete", "approve", "export", "manage"];
+
+const basePermissionModules: PermissionModuleDefinition[] = [
+  { key: "dashboard", label: "Dashboards", group: "core", actions: ["view"] },
+  { key: "company", label: "Company Profile", group: "core", actions: ["view", "edit", "manage"] },
+  { key: "employees", label: "Employees", group: "hr", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "clients", label: "Clients", group: "core", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "hr", label: "HR Setup", group: "hr", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "shifts", label: "Shift Types", group: "hr", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "attendance", label: "Attendance", group: "hr", actions: ["view", "create", "edit", "approve", "export", "manage"] },
+  { key: "leaves", label: "Leaves", group: "hr", actions: ["view", "create", "edit", "approve", "delete", "manage"] },
+  { key: "projects", label: "Projects", group: "work", actions: ["view", "create", "edit", "delete", "export", "manage"] },
+  { key: "tasks", label: "Tasks", group: "work", actions: ["view", "create", "edit", "delete", "export", "manage"] },
+  { key: "leads", label: "Leads", group: "core", actions: ["view", "create", "edit", "delete", "export", "manage"] },
+  { key: "contracts", label: "Contracts", group: "work", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "products", label: "Products", group: "finance", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "finance", label: "Finance", group: "finance", actions: ["view", "create", "edit", "delete", "approve", "export", "manage"] },
+  { key: "payroll", label: "Payroll", group: "finance", actions: ["view", "create", "edit", "approve", "export", "manage"] },
+  { key: "tickets", label: "Tickets", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "recruitment", label: "Recruitment", group: "hr", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "reports", label: "Reports", group: "core", actions: ["view", "export"] },
+  { key: "messages", label: "Messages", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "events", label: "Events", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "notices", label: "Notice Board", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "billing", label: "Billing", group: "finance", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "faq", label: "FAQ", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "settings", label: "Settings", group: "settings", actions: ["view", "edit", "manage"] },
+  { key: "roles", label: "Roles & Permissions", group: "settings", actions: ["view", "create", "edit", "delete", "manage"] },
+];
+
+export const permissionModules = basePermissionModules.filter(
+  (moduleItem) => isSaasBillingEnabled || moduleItem.key !== "billing",
+);
+
+export const adminAssignablePermissionModules = permissionModules.filter((moduleItem) => moduleItem.key !== "profile");
+
+export const permissionKey = (moduleKey: PermissionModuleKey | string, action: PermissionAction): PermissionKey =>
+  `${moduleKey}.${action}` as PermissionKey;
+
+export const expandModulePermissions = (moduleKey: PermissionModuleKey) => {
+  const moduleItem = permissionModules.find((item) => item.key === moduleKey);
+  return moduleItem ? moduleItem.actions.map((action) => permissionKey(moduleKey, action)) : [];
+};
+
+export const getModulesFromPermissions = (permissions: string[] = []) => {
+  if (permissions.includes("*")) {
+    return adminAssignablePermissionModules.map((moduleItem) => moduleItem.key);
+  }
+
+  return Array.from(
+    new Set(
+      permissions
+        .map((permission) => permission.split(".")[0] as PermissionModuleKey)
+        .filter((moduleKey) => adminAssignablePermissionModules.some((moduleItem) => moduleItem.key === moduleKey)),
+    ),
+  );
+};
 
 export type AuthUser = {
   id: number | string;
@@ -35,8 +130,8 @@ export const roleDefinitions: Record<UserRole, RoleDefinition> = {
     label: "Super Admin",
     panel: "platform",
     defaultRoute: "/super-admin/dashboard",
-    description: "Platform owner who manages companies, packages, invoices, global settings, and platform admins.",
-    scope: "No company scope. Can administer the SaaS/platform layer only.",
+    description: "Internal system owner who manages company structure, branches, admins, permissions, and global settings.",
+    scope: "No employee self-scope. Can administer the internal company system layer only.",
   },
   admin: {
     label: "Admin",
@@ -49,7 +144,7 @@ export const roleDefinitions: Record<UserRole, RoleDefinition> = {
     label: "Employee",
     panel: "member",
     defaultRoute: "/member/dashboard",
-    description: "Internal staff/member portal for attendance, leaves, assigned projects, tasks, tickets, notices, and profile.",
+    description: "Internal staff/member portal for attendance, leaves, payslips, assigned projects, tasks, tickets, notices, and profile.",
     scope: "Company scoped and generally self/team scoped depending on assigned permissions.",
   },
   client: {
@@ -71,6 +166,7 @@ export const roleDefaultRoutes: Record<UserRole, string> = {
 export const rolePermissions: Record<UserRole, PermissionKey[]> = {
   super_admin: ["*"],
   admin: [
+    "dashboard.*",
     "company.*",
     "settings.*",
     "roles.*",
@@ -90,23 +186,32 @@ export const rolePermissions: Record<UserRole, PermissionKey[]> = {
     "messages.*",
     "events.*",
     "notices.*",
+    "leads.*",
+    "contracts.*",
+    "products.*",
+    "billing.*",
+    "faq.*",
     "profile.*",
   ],
   employee: [
+    "dashboard.view",
     "profile.*",
     "attendance.view",
     "attendance.create",
     "leaves.view",
     "leaves.create",
     "leaves.delete",
+    "payroll.view",
     "projects.view",
     "tasks.*",
     "tickets.*",
     "messages.*",
     "events.view",
     "notices.view",
+    "faq.view",
   ],
   client: [
+    "dashboard.view",
     "profile.*",
     "projects.view",
     "tasks.view",
@@ -116,6 +221,7 @@ export const rolePermissions: Record<UserRole, PermissionKey[]> = {
     "messages.*",
     "events.view",
     "notices.view",
+    "faq.view",
   ],
 };
 
@@ -124,6 +230,11 @@ const publicPathPrefixes = ["/", "/login", "/signup", "/forgot-password", "/rese
 type RoleRouteRule = {
   prefixes: string[];
   roles: UserRole[];
+};
+
+type PermissionRouteRule = {
+  prefixes: string[];
+  anyOf: PermissionKey[];
 };
 
 export const roleRouteRules: RoleRouteRule[] = [
@@ -201,6 +312,43 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
 ];
 
+export const permissionRouteRules: PermissionRouteRule[] = [
+  { prefixes: ["/dashboard/hr"], anyOf: ["dashboard.view", "hr.view", "employees.view", "attendance.view", "leaves.view"] },
+  { prefixes: ["/dashboard/finance"], anyOf: ["dashboard.view", "finance.view"] },
+  { prefixes: ["/dashboard/project"], anyOf: ["dashboard.view", "projects.view", "tasks.view"] },
+  { prefixes: ["/dashboard/ticket"], anyOf: ["dashboard.view", "tickets.view"] },
+  { prefixes: ["/dashboard"], anyOf: ["dashboard.view"] },
+  { prefixes: ["/settings", "/account-setup", "/module-settings", "/custom-fields"], anyOf: ["settings.view", "settings.manage"] },
+  { prefixes: ["/role-permission"], anyOf: ["roles.view", "roles.manage"] },
+  { prefixes: ["/billing"], anyOf: ["billing.view", "billing.manage"] },
+  { prefixes: ["/payroll"], anyOf: ["payroll.view", "payroll.manage"] },
+  { prefixes: ["/faqs", "/employees/faq"], anyOf: ["faq.view", "faq.manage"] },
+  { prefixes: ["/employees"], anyOf: ["employees.view", "employees.manage"] },
+  { prefixes: ["/teams", "/designation", "/attendance-settings"], anyOf: ["hr.view", "hr.manage"] },
+  { prefixes: ["/shift-types"], anyOf: ["shifts.view", "shifts.manage"] },
+  { prefixes: ["/leaves/all", "/leaves/settings", "/leave-type"], anyOf: ["leaves.view", "leaves.manage", "leaves.approve"] },
+  { prefixes: ["/attendance/bulk"], anyOf: ["attendance.create", "attendance.manage"] },
+  { prefixes: ["/attendance"], anyOf: ["attendance.view", "attendance.manage"] },
+  { prefixes: ["/leaves"], anyOf: ["leaves.view", "leaves.manage"] },
+  { prefixes: ["/holidays"], anyOf: ["hr.view", "hr.manage"] },
+  { prefixes: ["/clients", "/client-contacts", "/client-settings"], anyOf: ["clients.view", "clients.manage"] },
+  { prefixes: ["/invoices", "/estimates", "/proposals", "/credit-notes", "/payments", "/expenses", "/invoice-recurring", "/expenses-recurring"], anyOf: ["finance.view", "finance.manage"] },
+  { prefixes: ["/leads", "/lead-form", "/lead-settings"], anyOf: ["leads.view", "leads.manage"] },
+  { prefixes: ["/recruitment"], anyOf: ["recruitment.view", "recruitment.manage"] },
+  { prefixes: ["/reports"], anyOf: ["reports.view", "reports.export"] },
+  { prefixes: ["/contracts"], anyOf: ["contracts.view", "contracts.manage"] },
+  { prefixes: ["/projects"], anyOf: ["projects.view", "projects.manage"] },
+  { prefixes: ["/tasks", "/taskboard", "/task-calendar", "/task-category", "/task-label", "/task-request", "/sub-task"], anyOf: ["tasks.view", "tasks.manage"] },
+  { prefixes: ["/time-logs"], anyOf: ["tasks.view", "projects.view", "reports.view"] },
+  { prefixes: ["/discussion", "/discussion-categories", "/discussion-reply"], anyOf: ["projects.view", "tasks.view"] },
+  { prefixes: ["/tickets", "/support-tickets", "/ticket-form", "/ticket-settings"], anyOf: ["tickets.view", "tickets.manage"] },
+  { prefixes: ["/user-chat"], anyOf: ["messages.view", "messages.manage"] },
+  { prefixes: ["/events", "/event-calendar", "/event-type"], anyOf: ["events.view", "events.manage"] },
+  { prefixes: ["/notices"], anyOf: ["notices.view", "notices.manage"] },
+  { prefixes: ["/products"], anyOf: ["products.view", "products.manage"] },
+  { prefixes: ["/profile", "/search"], anyOf: ["profile.view", "dashboard.view"] },
+];
+
 export const normalizeRole = (role?: string | null): UserRole => {
   if (role === "super-admin") return "super_admin";
   if (role === "super_admin" || role === "admin" || role === "employee" || role === "client") {
@@ -217,6 +365,7 @@ export const getDefaultRouteForRole = (role?: string | null) => roleDefaultRoute
 
 export const canRoleAccessPath = (role: UserRole, pathname: string) => {
   if (isPublicPath(pathname)) return true;
+  if (!isSaasBillingEnabled && isSaasBillingPath(pathname)) return false;
 
   const matchedRule = roleRouteRules.find((rule) =>
     rule.prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)),
@@ -230,15 +379,39 @@ export const canRoleAccessPath = (role: UserRole, pathname: string) => {
 };
 
 export const canUserAccessPath = (user: AuthUser | null, pathname: string) =>
-  Boolean(user && canRoleAccessPath(normalizeRole(user.role), pathname));
+  Boolean(user && canRoleAccessPath(normalizeRole(user.role), pathname) && hasPathPermission(user, pathname));
+
+export const hasPathPermission = (user: AuthUser, pathname: string) => {
+  const role = normalizeRole(user.role);
+  if (role !== "admin") return true;
+
+  const matchedRule = permissionRouteRules.find((rule) =>
+    rule.prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)),
+  );
+
+  if (!matchedRule) return true;
+  return matchedRule.anyOf.some((permission) => userHasPermission(user, permission));
+};
 
 export const userHasPermission = (user: AuthUser | null, permission: PermissionKey) => {
   if (!user) return false;
-  const permissions = user.permissions?.length ? user.permissions : rolePermissions[normalizeRole(user.role)];
+  const permissions = Array.isArray(user.permissions) ? user.permissions : rolePermissions[normalizeRole(user.role)];
   if (permissions.includes("*")) return true;
 
   const [moduleName] = permission.split(".");
   return permissions.some((item) => item === permission || item === `${moduleName}.*` || item === `${user.role}.*`);
+};
+
+export const getDefaultRouteForUser = (user: AuthUser | null) => {
+  if (!user) return "/login";
+
+  const role = normalizeRole(user.role);
+  const roleDefault = getDefaultRouteForRole(role);
+  if (canUserAccessPath(user, roleDefault)) return roleDefault;
+  if (role !== "admin") return roleDefault;
+
+  const firstAllowedRule = permissionRouteRules.find((rule) => rule.anyOf.some((permission) => userHasPermission(user, permission)));
+  return firstAllowedRule?.prefixes[0] || "/profile";
 };
 
 export const makeDevUserFromEmail = (email: string): AuthUser => {
