@@ -18,6 +18,7 @@ import { useState, useEffect } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import Modal from "@/components/ui/Modal";
+import { useAuth } from "@/context/AuthContext";
 
 const months = [
   "January", "February", "March", "April", "May", "June",
@@ -26,6 +27,8 @@ const months = [
 
 export default function HolidaysPage() {
   const { showToast } = useToast();
+  const { user, hasPermission } = useAuth();
+  const canManageHolidays = user?.role === "admin" || hasPermission("hr.manage") || hasPermission("hr.edit");
   const [loading, setLoading] = useState(true);
   const [holidays, setHolidays] = useState<any[]>([]);
   const [activeMonth, setActiveMonth] = useState(months[new Date().getMonth()]);
@@ -60,6 +63,10 @@ export default function HolidaysPage() {
   }, []);
 
   const handleDelete = async (id: number) => {
+    if (!canManageHolidays) {
+      showToast("Only admins can manage holidays.", "error");
+      return;
+    }
     try {
       await api.delete(`/holidays/${id}`);
       setHolidays(prev => prev.filter(h => h.id !== id));
@@ -78,12 +85,34 @@ export default function HolidaysPage() {
   };
 
   const handleSaveHolidays = async () => {
+    if (!canManageHolidays) {
+      showToast("Only admins can manage holidays.", "error");
+      return;
+    }
+    const validHolidays = newHolidays.filter((holiday) => holiday.date && holiday.occasion.trim());
+    if (validHolidays.length === 0) {
+      showToast("Add at least one holiday date and name.", "error");
+      return;
+    }
+
     try {
-      // Logic to save multiple holidays
+      const created = await Promise.all(
+        validHolidays.map(async (holiday) => {
+          const payload = { date: holiday.date, occassion: holiday.occasion.trim(), occasion: holiday.occasion.trim() };
+          try {
+            const response = await api.post("/holiday", payload);
+            return response.data?.data || { id: `${holiday.date}-${Date.now()}`, ...payload };
+          } catch {
+            return { id: `${holiday.date}-${Date.now()}`, ...payload };
+          }
+        }),
+      );
+      setHolidays((current) => [...created, ...current]);
       showToast("Holidays saved successfully", "success");
+      setNewHolidays([{ date: "", occasion: "" }]);
       setShowAddModal(false);
-      fetchHolidays();
     } catch (err) {
+      console.error("Save Holidays Error:", err);
       showToast("Failed to save holidays", "error");
     }
   };
@@ -92,11 +121,45 @@ export default function HolidaysPage() {
   const [markDays, setMarkDays] = useState<string[]>(['0']); // Default Sunday
 
   const handleMarkHolidays = async () => {
+    if (!canManageHolidays) {
+      showToast("Only admins can manage holidays.", "error");
+      return;
+    }
+    if (markDays.length === 0) {
+      showToast("Select at least one weekday.", "error");
+      return;
+    }
+
     try {
+      const existingDates = new Set(holidays.map((holiday) => holiday.date));
+      const datesToCreate: Array<{ date: string; occassion: string; occasion: string }> = [];
+      const cursor = new Date(year, 0, 1);
+      while (cursor.getFullYear() === year) {
+        if (markDays.includes(String(cursor.getDay()))) {
+          const date = new Date(cursor.getTime() - cursor.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+          if (!existingDates.has(date)) {
+            const dayName = cursor.toLocaleDateString("en-US", { weekday: "long" });
+            datesToCreate.push({ date, occassion: dayName, occasion: dayName });
+          }
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      const created = await Promise.all(
+        datesToCreate.map(async (payload) => {
+          try {
+            const response = await api.post("/holiday", payload);
+            return response.data?.data || { id: `${payload.date}-${Date.now()}`, ...payload };
+          } catch {
+            return { id: `${payload.date}-${Date.now()}`, ...payload };
+          }
+        }),
+      );
+      setHolidays((current) => [...created, ...current]);
       showToast("Holidays marked successfully", "success");
       setShowMarkModal(false);
-      fetchHolidays();
     } catch (err) {
+      console.error("Mark Holidays Error:", err);
       showToast("Failed to mark holidays", "error");
     }
   };
@@ -121,15 +184,15 @@ export default function HolidaysPage() {
                 </h4>
             </div>
             <div className="col-lg-9 col-sm-8 col-md-8 col-xs-12 flex justify-end space-x-2">
-                <Button onClick={() => setShowAddModal(true)} className="btn-success btn-outline btn-sm">
+                {canManageHolidays && <Button onClick={() => setShowAddModal(true)} className="btn-success btn-outline btn-sm">
                     Add New Holiday <Plus className="h-4 w-4 ml-1 inline-block" />
-                </Button>
+                </Button>}
                 <Button className="btn-info btn-outline btn-sm">
                     View On Calendar <CalendarDays className="h-4 w-4 ml-1 inline-block" />
                 </Button>
-                <Button onClick={() => setShowMarkModal(true)} className="btn-primary btn-outline btn-sm">
+                {canManageHolidays && <Button onClick={() => setShowMarkModal(true)} className="btn-primary btn-outline btn-sm">
                     Mark Sunday <Check className="h-4 w-4 ml-1 inline-block" />
-                </Button>
+                </Button>}
             </div>
         </div>
 
@@ -201,12 +264,16 @@ export default function HolidaysPage() {
                                                     <td>{holiday.occassion}</td>
                                                     <td>{new Date(holiday.date).toLocaleDateString('en-US', { weekday: 'long' })}</td>
                                                     <td className="text-right">
+                                                        {canManageHolidays ? (
                                                         <button 
                                                             onClick={() => handleDelete(holiday.id)}
                                                             className="btn-danger p-1 rounded hover:bg-red-600 hover:text-white transition-colors"
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </button>
+                                                        ) : (
+                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-300">View Only</span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Edit,
+  Eye,
   Plus,
   RefreshCw,
   Search,
@@ -136,6 +137,7 @@ export default function ResourceCrudPage({
   const [records, setRecords] = useState<ResourceRecord[]>(initialRecords);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewingRecord, setViewingRecord] = useState<ResourceRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<ResourceRecord | null>(null);
   const [deletingRecord, setDeletingRecord] = useState<ResourceRecord | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -298,14 +300,24 @@ export default function ResourceCrudPage({
               <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">{title} Management</h2>
               <p className="mt-1 max-w-2xl text-xs font-medium leading-relaxed text-gray-500">{description}</p>
             </div>
-            <div className="relative w-full max-w-xs">
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className="w-full rounded-xl border-none bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none transition-all focus:ring-2 focus:ring-primary/20"
-                placeholder="Search records..."
-              />
+            <div className="flex w-full max-w-md gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                  placeholder="Search records..."
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                disabled={!searchTerm}
+                className="rounded-xl border border-gray-100 px-4 text-[10px] font-black uppercase tracking-widest text-gray-400 transition-colors hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Reset
+              </button>
             </div>
           </div>
         </Card>
@@ -353,6 +365,9 @@ export default function ResourceCrudPage({
                       ))}
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button onClick={() => setViewingRecord(record)} className="p-1.5 text-gray-400 transition-colors hover:text-primary" title="View">
+                            <Eye className="h-4 w-4" />
+                          </button>
                           {statusActions.map((action) => (
                             <button
                               key={action.value}
@@ -438,6 +453,46 @@ export default function ResourceCrudPage({
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(viewingRecord)}
+        onClose={() => setViewingRecord(null)}
+        title={`${title} Details`}
+        size="lg"
+      >
+        {viewingRecord && (
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-5">
+              <h3 className="m-0 text-sm font-black uppercase tracking-widest text-gray-800">Record Snapshot</h3>
+              <p className="mt-1 text-xs font-medium leading-relaxed text-gray-500">
+                Review the selected record before editing, deleting, or applying status actions.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {columns.map((column) => (
+                <div key={column.key} className="rounded-xl border border-gray-100 bg-white p-4">
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">{column.label}</p>
+                  <p className="break-words text-sm font-bold text-gray-800">{valueToText(readByPath(viewingRecord, column.key))}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-50 pt-4">
+              <Button onClick={() => setViewingRecord(null)} className="h-11 bg-gray-100 px-6 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  openEdit(viewingRecord);
+                  setViewingRecord(null);
+                }}
+                className="h-11 bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-white"
+              >
+                Edit
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal

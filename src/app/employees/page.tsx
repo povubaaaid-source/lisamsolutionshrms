@@ -10,7 +10,9 @@ import {
   Eye, 
   AlertTriangle,
   Users,
-  UserCheck
+  UserCheck,
+  Search,
+  Download
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
@@ -46,6 +48,7 @@ export default function EmployeesPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [designationFilter, setDesignationFilter] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -81,13 +84,25 @@ export default function EmployeesPage() {
   }, []);
 
   const filteredEmployees = employees.filter(emp => {
+    const query = searchTerm.trim().toLowerCase();
+    const joiningDate = emp.employee_detail?.joining_date || "";
+    const searchableText = [
+      emp.name,
+      emp.email,
+      emp.role,
+      emp.status,
+      emp.employee_detail?.designation?.name,
+      emp.employee_detail?.department?.team_name,
+    ].filter(Boolean).join(" ").toLowerCase();
+    const searchMatch = !query || searchableText.includes(query);
     const statusMatch = statusFilter === "all" || emp.status === statusFilter;
     const deptMatch = deptFilter === "all" || emp.employee_detail?.department?.team_name === deptFilter;
     const desigMatch = designationFilter === "all" || emp.employee_detail?.designation?.name === designationFilter;
     const empMatch = employeeFilter === "all" || emp.id.toString() === employeeFilter;
-    const roleMatch = roleFilter === "all" || emp.role === roleFilter;
-    // Add date range filter logic here if needed
-    return statusMatch && deptMatch && desigMatch && empMatch && roleMatch;
+    const roleMatch = roleFilter === "all" || (emp.role || "employee") === roleFilter;
+    const startMatch = !startDate || (Boolean(joiningDate) && joiningDate >= startDate);
+    const endMatch = !endDate || (Boolean(joiningDate) && joiningDate <= endDate);
+    return searchMatch && statusMatch && deptMatch && desigMatch && empMatch && roleMatch && startMatch && endMatch;
   });
   const canManageEmployees = userRole === "admin";
 
@@ -111,8 +126,32 @@ export default function EmployeesPage() {
     setRoleFilter("all");
     setDesignationFilter("all");
     setEmployeeFilter("all");
+    setSearchTerm("");
     setStartDate("");
     setEndDate("");
+  };
+
+  const handleExport = () => {
+    const rows = [
+      ["Name", "Email", "Role", "Designation", "Department", "Joining Date", "Status"],
+      ...filteredEmployees.map((employee) => [
+        employee.name,
+        employee.email || "",
+        employee.role || "employee",
+        employee.employee_detail?.designation?.name || "",
+        employee.employee_detail?.department?.team_name || "",
+        employee.employee_detail?.joining_date || "",
+        employee.status || "",
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "employees.csv";
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const departments = Array.from(new Set(employees.map(e => e.employee_detail?.department?.team_name).filter(Boolean)));
@@ -138,6 +177,9 @@ export default function EmployeesPage() {
           <div className="flex items-center space-x-2">
              <Button onClick={fetchEmployees} className="btn-default">
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Sync
+             </Button>
+             <Button onClick={handleExport} className="btn-default">
+                <Download className="h-4 w-4 mr-2" /> Export
              </Button>
              {canManageEmployees && (
                <Link href="/employees/create">
@@ -177,6 +219,19 @@ export default function EmployeesPage() {
         {/* Filters */}
         <Card className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="space-y-2 lg:col-span-2">
+              <label className="block mb-1">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="form-control pl-10"
+                  placeholder="Search employee, email, role, department"
+                  type="search"
+                />
+              </div>
+            </div>
             
             <div className="space-y-2">
               <label className="block mb-1">Employee</label>

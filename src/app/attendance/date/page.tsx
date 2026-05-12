@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 
 type ShiftSummary = {
   id?: number | string;
@@ -21,6 +22,8 @@ type ShiftSummary = {
 type EmployeeOption = {
   id: number | string;
   name: string;
+  email?: string;
+  role?: string;
   employee_detail?: {
     designation?: { name?: string };
     shift_type?: ShiftSummary;
@@ -92,10 +95,19 @@ const getStatusClass = (status: string) => {
   return "label-info";
 };
 
+const DEFAULT_ATTENDANCE_DATE = new Date().toISOString().slice(0, 10);
+
 export default function AttendanceByDatePage() {
   const { showToast } = useToast();
+  const { user, hasPermission } = useAuth();
+  const canManageAttendance =
+    user?.role === "admin" ||
+    hasPermission("attendance.manage") ||
+    hasPermission("attendance.edit") ||
+    hasPermission("attendance.approve") ||
+    hasPermission("attendance.export");
   const [loading, setLoading] = useState(true);
-  const [date, setDate] = useState("2026-05-01");
+  const [date, setDate] = useState(DEFAULT_ATTENDANCE_DATE);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
@@ -106,8 +118,16 @@ export default function AttendanceByDatePage() {
         api.get("/employee"),
         api.get("/attendance"),
       ]);
-      setEmployees(employeeResponse.data.data || []);
-      setAttendance(attendanceResponse.data.data || []);
+      const employeeList = (employeeResponse.data.data || []) as EmployeeOption[];
+      const attendanceList = (attendanceResponse.data.data || []) as AttendanceRecord[];
+      const selfEmployee = employeeList.find((employee) =>
+        String(employee.id) === String(user?.id) ||
+        employee.email === user?.email ||
+        employee.name === user?.name
+      );
+      const selfId = String(selfEmployee?.id || user?.id || "");
+      setEmployees(canManageAttendance ? employeeList : employeeList.filter((employee) => String(employee.id) === selfId));
+      setAttendance(canManageAttendance ? attendanceList : attendanceList.filter((row) => String(row.employee_id || row.user_id || row.employee?.id || "") === selfId || row.employee?.name === user?.name));
     } catch (err) {
       console.error("Fetch Daily Attendance Error:", err);
       showToast("Failed to load daily attendance", "error");
@@ -121,6 +141,10 @@ export default function AttendanceByDatePage() {
     fetchAttendance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const resetFilters = () => {
+    setDate(DEFAULT_ATTENDANCE_DATE);
+  };
 
   const dailyRows = useMemo(() => attendance.filter((row) => row.date === date), [attendance, date]);
   const presentCount = dailyRows.filter((row) => ["present", "late"].includes(calculateStatus(row, getShiftForRow(row, employees)))).length;
@@ -139,7 +163,7 @@ export default function AttendanceByDatePage() {
           <div className="col-sm-9 text-right flex justify-end items-center space-x-2">
             <Link href="/attendance/create">
               <Button className="btn-success btn-sm">
-                Mark Attendance <Plus className="h-4 w-4 ml-1 inline-block" />
+                {canManageAttendance ? "Mark Attendance" : "Clock In"} <Plus className="h-4 w-4 ml-1 inline-block" />
               </Button>
             </Link>
             <ol className="breadcrumb hidden-xs">
@@ -170,6 +194,11 @@ export default function AttendanceByDatePage() {
             <div>
               <Button onClick={fetchAttendance} className="btn-success btn-block h-[34px]">
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} /> Apply
+              </Button>
+            </div>
+            <div>
+              <Button onClick={resetFilters} className="btn-default btn-block h-[34px]">
+                Reset
               </Button>
             </div>
           </div>

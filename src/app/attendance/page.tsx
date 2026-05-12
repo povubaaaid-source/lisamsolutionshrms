@@ -7,10 +7,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 
 type EmployeeOption = {
   id: number | string;
   name: string;
+  email?: string;
+  role?: string;
   employee_detail?: {
     shift_type_id?: number | string;
     shift_type?: ShiftSummary;
@@ -48,9 +51,9 @@ type AttendanceRecord = {
   shift_type?: ShiftSummary;
 };
 
-const today = new Date("2026-05-08");
+const today = new Date();
 const defaultFrom = new Date(today);
-defaultFrom.setDate(today.getDate() - 7);
+defaultFrom.setDate(today.getDate() - 30);
 
 const formatTime = (value?: string) => value || "--:--";
 
@@ -114,6 +117,13 @@ const getStatusClass = (status: string) => {
 
 export default function AttendancePage() {
   const { showToast } = useToast();
+  const { user, hasPermission } = useAuth();
+  const canManageAttendance =
+    user?.role === "admin" ||
+    hasPermission("attendance.manage") ||
+    hasPermission("attendance.edit") ||
+    hasPermission("attendance.approve") ||
+    hasPermission("attendance.export");
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -128,8 +138,22 @@ export default function AttendancePage() {
         api.get("/employee"),
         api.get("/attendance"),
       ]);
-      setEmployees(employeeResponse.data.data || []);
-      setAttendance(attendanceResponse.data.data || []);
+      const employeeList = (employeeResponse.data.data || []) as EmployeeOption[];
+      const attendanceList = (attendanceResponse.data.data || []) as AttendanceRecord[];
+      const selfEmployee = employeeList.find((employee) =>
+        String(employee.id) === String(user?.id) ||
+        employee.email === user?.email ||
+        employee.name === user?.name
+      );
+      const scopedEmployees = canManageAttendance ? employeeList : employeeList.filter((employee) => String(employee.id) === String(selfEmployee?.id || user?.id));
+      const scopedAttendance = canManageAttendance
+        ? attendanceList
+        : attendanceList.filter((row) => {
+          const rowEmployeeId = String(row.employee_id || row.user_id || row.employee?.id || "");
+          return rowEmployeeId === String(selfEmployee?.id || user?.id) || row.employee?.name === user?.name;
+        });
+      setEmployees(scopedEmployees);
+      setAttendance(scopedAttendance);
     } catch (err) {
       console.error("Fetch Attendance Error:", err);
       showToast("Failed to load attendance", "error");
@@ -143,6 +167,12 @@ export default function AttendancePage() {
     fetchAttendance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const resetFilters = () => {
+    setSelectedEmployee("all");
+    setDateFrom(defaultFrom.toISOString().slice(0, 10));
+    setDateTo(today.toISOString().slice(0, 10));
+  };
 
   const filteredAttendance = useMemo(() => {
     return attendance.filter((row) => {
@@ -175,7 +205,7 @@ export default function AttendancePage() {
           <div className="col-sm-9 text-right flex justify-end items-center space-x-2">
             <Link href="/attendance/create">
               <Button className="btn-success btn-sm">
-                Mark Attendance <Plus className="h-4 w-4 ml-1 inline-block" />
+                {canManageAttendance ? "Mark Attendance" : "Clock In"} <Plus className="h-4 w-4 ml-1 inline-block" />
               </Button>
             </Link>
             <ol className="breadcrumb hidden-xs">
@@ -208,9 +238,9 @@ export default function AttendancePage() {
               <input type="date" className="form-control" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-[12px] font-bold text-gray-600 mb-2">Employee Name</label>
+              <label className="block text-[12px] font-bold text-gray-600 mb-2">{canManageAttendance ? "Employee Name" : "My Profile"}</label>
               <select className="form-control" value={selectedEmployee} onChange={(event) => setSelectedEmployee(event.target.value)}>
-                <option value="all">All Employees</option>
+                <option value="all">{canManageAttendance ? "All Employees" : "My Attendance"}</option>
                 {employees.map((employee) => (
                   <option key={employee.id} value={employee.id}>{employee.name}</option>
                 ))}
@@ -219,6 +249,9 @@ export default function AttendancePage() {
             <div className="flex gap-2">
               <Button onClick={fetchAttendance} className="btn-success btn-block h-[34px]">
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} /> Apply
+              </Button>
+              <Button onClick={resetFilters} className="btn-default btn-block h-[34px]">
+                Reset
               </Button>
             </div>
           </div>

@@ -3,15 +3,18 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { Plus, Filter, RefreshCw, Edit, Trash2, Eye, UserPlus, Mail, Phone, Globe, AlertTriangle } from "lucide-react";
+import { Plus, Filter, RefreshCw, Edit, Trash2, Eye, UserPlus, Mail, Phone, Globe, AlertTriangle, Search } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
 
 export default function LeadsPage() {
+  const { showToast } = useToast();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [deletingLeadId, setDeletingLeadId] = useState<number | null>(null);
 
@@ -22,6 +25,7 @@ export default function LeadsPage() {
       setLeads(response.data.data);
     } catch (err) {
       console.error("Fetch Leads Error:", err);
+      showToast("Failed to load leads", "error");
     } finally {
       setLoading(false);
     }
@@ -36,17 +40,25 @@ export default function LeadsPage() {
       try {
         await api.delete(`/lead/${deletingLeadId}`);
         setLeads(prev => prev.filter(l => l.id !== deletingLeadId));
+        showToast("Lead deleted successfully", "success");
         setDeletingLeadId(null);
       } catch (err) {
         console.error("Delete Lead Error:", err);
-        alert("Failed to delete lead");
+        setLeads(prev => prev.filter(l => l.id !== deletingLeadId));
+        showToast("Lead removed locally. PHP endpoint needs to persist it.", "error");
+        setDeletingLeadId(null);
       }
     }
   };
 
   const filteredLeads = leads.filter(l => {
-    if (statusFilter === "All") return true;
-    return l.status?.type === statusFilter;
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = searchTerm
+      ? [l.client_name, l.client_email, l.company_name, l.source?.type, l.status?.type, l.value]
+        .some((value) => String(value || "").toLowerCase().includes(search))
+      : true;
+    const matchesStatus = statusFilter === "All" || l.status?.type === statusFilter;
+    return matchesSearch && matchesStatus;
   });
 
   return (
@@ -71,6 +83,18 @@ export default function LeadsPage() {
         {/* Filters */}
         <Card className="p-5 border-none shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="md:col-span-2">
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pl-10 text-xs font-bold outline-none transition-all focus:ring-1 focus:ring-primary/20"
+                  placeholder="Search by lead, company, email, source..."
+                />
+              </div>
+            </div>
             <div>
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Status</label>
               <select 
@@ -85,10 +109,12 @@ export default function LeadsPage() {
                 <option>Lost</option>
               </select>
             </div>
-            <div className="lg:col-span-2"></div>
             <div className="flex justify-end">
               <button 
-                onClick={() => setStatusFilter("All")}
+                onClick={() => {
+                  setSearchTerm("");
+                  setStatusFilter("All");
+                }}
                 className="flex items-center space-x-1 rounded-lg border border-gray-200 px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-50 transition-all"
               >
                 <RefreshCw className="h-3.5 w-3.5 mr-1" /><span>Reset</span>

@@ -216,6 +216,18 @@ const seedStore: MockStore = {
       due_date: "2026-05-12",
       created_at: now,
     },
+    {
+      id: 3,
+      heading: "Prepare monthly leave audit",
+      title: "Prepare monthly leave audit",
+      status: "completed",
+      priority: "medium",
+      project_id: 1,
+      project: { id: 1, project_name: "HR Portal Migration" },
+      users: [{ id: 3, name: "Mike Tyson" }],
+      due_date: "2026-05-09",
+      created_at: now,
+    },
   ],
   tickets: [
     {
@@ -304,12 +316,53 @@ const seedStore: MockStore = {
   leaves: [
     {
       id: 1,
-      leave_type: { id: 1, type_name: "Sick Leave" },
+      leave_type_id: 1,
+      leave_type: { id: 1, type_name: "Sick Leave", color: "#ef4444", no_of_leaves: 8 },
+      type: { id: 1, type_name: "Sick Leave", color: "#ef4444" },
       user: { id: 2, name: "Jane Smith" },
+      employee: { id: 2, name: "Jane Smith" },
+      user_id: 2,
+      employee_id: 2,
       status: "pending",
       leave_date: "2026-05-14",
+      reason: "Medical appointment",
+      duration: "single",
       created_at: now,
     },
+    {
+      id: 2,
+      leave_type_id: 2,
+      leave_type: { id: 2, type_name: "Casual Leave", color: "#0ea5e9", no_of_leaves: 10 },
+      type: { id: 2, type_name: "Casual Leave", color: "#0ea5e9" },
+      user: { id: 1, name: "John Doe" },
+      employee: { id: 1, name: "John Doe" },
+      user_id: 1,
+      employee_id: 1,
+      status: "approved",
+      leave_date: "2026-05-06",
+      reason: "Family work",
+      duration: "single",
+      created_at: now,
+    },
+    {
+      id: 3,
+      leave_type_id: 1,
+      leave_type: { id: 1, type_name: "Sick Leave", color: "#ef4444", no_of_leaves: 8 },
+      type: { id: 1, type_name: "Sick Leave", color: "#ef4444" },
+      user: { id: 3, name: "Mike Tyson" },
+      employee: { id: 3, name: "Mike Tyson" },
+      user_id: 3,
+      employee_id: 3,
+      status: "approved",
+      leave_date: "2026-05-02",
+      reason: "Sick leave",
+      duration: "half day",
+      created_at: now,
+    },
+  ],
+  holidays: [
+    { id: 1, date: "2026-05-01", holiday_date: "2026-05-01", occassion: "Labour Day", name: "Labour Day", created_at: now },
+    { id: 2, date: "2026-05-25", holiday_date: "2026-05-25", occassion: "Company Holiday", name: "Company Holiday", created_at: now },
   ],
   attendance: [
     {
@@ -377,6 +430,25 @@ const seedStore: MockStore = {
       created_at: now,
     },
   ],
+  "attendance-settings": [
+    {
+      id: 1,
+      office_start_time: "09:00",
+      office_end_time: "18:00",
+      halfday_mark_time: "13:00",
+      late_mark_duration: 15,
+      clockin_in_day: 1,
+      employee_clock_in_out: "yes",
+      office_open_days: [1, 2, 3, 4, 5],
+      radius_check: "no",
+      radius: 100,
+      ip_check: "no",
+      ip_address: [],
+      alert_after_status: 1,
+      alert_after: 30,
+      created_at: now,
+    },
+  ],
   departments: [
     { id: 1, name: "Administration", team_name: "Administration" },
     { id: 2, name: "Design", team_name: "Design" },
@@ -400,8 +472,71 @@ const seedStore: MockStore = {
     { id: 2, currency_name: "Pakistani Rupee", currency_symbol: "Rs", currency_code: "PKR" },
   ],
   "leave-types": [
-    { id: 1, type_name: "Sick Leave", color: "#ef4444" },
-    { id: 2, type_name: "Casual Leave", color: "#0ea5e9" },
+    { id: 1, type_name: "Sick Leave", color: "#ef4444", no_of_leaves: 8, leave_number: 8, paid: 1 },
+    { id: 2, type_name: "Casual Leave", color: "#0ea5e9", no_of_leaves: 10, leave_number: 10, paid: 1 },
+    { id: 3, type_name: "Unpaid Leave", color: "#64748b", no_of_leaves: 4, leave_number: 4, paid: 0 },
+  ],
+  "leave-quotas": [
+    { id: 1, user_id: 1, employee_id: 1, leave_type_id: 1, no_of_leaves: 8 },
+    { id: 2, user_id: 1, employee_id: 1, leave_type_id: 2, no_of_leaves: 10 },
+    { id: 3, user_id: 2, employee_id: 2, leave_type_id: 1, no_of_leaves: 8 },
+    { id: 4, user_id: 2, employee_id: 2, leave_type_id: 2, no_of_leaves: 10 },
+    { id: 5, user_id: 3, employee_id: 3, leave_type_id: 1, no_of_leaves: 8 },
+    { id: 6, user_id: 3, employee_id: 3, leave_type_id: 2, no_of_leaves: 10 },
+  ],
+  "time-logs": [
+    {
+      id: 1,
+      user_id: 1,
+      employee_id: 1,
+      project_id: 1,
+      project: { id: 1, project_name: "HR Portal Migration" },
+      project_name: "HR Portal Migration",
+      start_time: "2026-05-07T09:00:00+05:00",
+      end_time: "2026-05-07T17:30:00+05:00",
+      total_minutes: 450,
+      total_hours: 7.5,
+      memo: "Dashboard permissions review",
+      created_at: now,
+    },
+    {
+      id: 2,
+      user_id: 2,
+      employee_id: 2,
+      project_id: 1,
+      project: { id: 1, project_name: "HR Portal Migration" },
+      project_name: "HR Portal Migration",
+      start_time: "2026-05-08T10:00:00+05:00",
+      end_time: "2026-05-08T18:00:00+05:00",
+      total_minutes: 420,
+      total_hours: 7,
+      memo: "UI polish",
+      created_at: now,
+    },
+    {
+      id: 3,
+      user_id: 3,
+      employee_id: 3,
+      project_id: 2,
+      project: { id: 2, project_name: "Payroll Automation" },
+      project_name: "Payroll Automation",
+      start_time: "2026-05-06T09:15:00+05:00",
+      end_time: "2026-05-06T17:15:00+05:00",
+      total_minutes: 405,
+      total_hours: 6.75,
+      memo: "Payroll report QA",
+      created_at: now,
+    },
+  ],
+  "employee-docs": [
+    { id: 1, user_id: 1, employee_id: 1, name: "Joining Letter.pdf", file_url: "#", size: "850 KB", created_at: "2026-04-02T09:00:00+05:00" },
+    { id: 2, user_id: 2, employee_id: 2, name: "ID Proof.pdf", file_url: "#", size: "1.2 MB", created_at: "2026-04-10T09:00:00+05:00" },
+    { id: 3, user_id: 3, employee_id: 3, name: "Contract.pdf", file_url: "#", size: "980 KB", created_at: "2026-04-12T09:00:00+05:00" },
+  ],
+  "user-activities": [
+    { id: 1, user_id: 1, employee_id: 1, activity: "Updated attendance settings", created_at: "2026-05-08T09:30:00+05:00" },
+    { id: 2, user_id: 2, employee_id: 2, activity: "Applied for sick leave", created_at: "2026-05-08T11:20:00+05:00" },
+    { id: 3, user_id: 3, employee_id: 3, activity: "Completed monthly leave audit task", created_at: "2026-05-07T16:40:00+05:00" },
   ],
   "shift-types": [
     {
@@ -634,32 +769,52 @@ const hydrateStore = (store: MockStore): MockStore => {
   };
 };
 
-const makeEmployeePayload = (store: MockStore, payload: Record<string, unknown>, id: number): MockRecord => {
-  const firstName = String(payload.name || payload.first_name || "New");
+const getNestedObject = (value: unknown) => (value && typeof value === "object" ? (value as Record<string, unknown>) : {});
+
+const makeEmployeePayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const existingDetail = getNestedObject(existing?.employee_detail);
+  const detailPayload = getNestedObject(payload.employee_detail);
+  const existingDesignation = getNestedObject(existingDetail.designation);
+  const existingDepartment = getNestedObject(existingDetail.department);
+  const firstName = String(payload.name || payload.first_name || existing?.name || "New");
   const lastName = String(payload.last_name || "");
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
-  const shiftTypeId = payload.shift_type_id || payload.shift_id;
+  const designationId = detailPayload.designation_id || payload.designation_id || payload.designation || existingDesignation.id || existingDetail.designation_id || id;
+  const departmentId = detailPayload.department_id || payload.department_id || payload.team_id || payload.department || existingDepartment.id || existingDetail.department_id || id;
+  const designationRecord = store.designations.find((record) => String(record.id) === String(designationId));
+  const departmentRecord = [...(store.departments || []), ...(store.teams || [])].find((record) => String(record.id) === String(departmentId));
+  const designationName = String(payload.designation_name || designationRecord?.name || existingDesignation.name || payload.designation || "Employee");
+  const departmentName = String(payload.department_name || departmentRecord?.team_name || departmentRecord?.name || existingDepartment.team_name || existingDepartment.name || payload.department || "General");
+  const shiftTypeId = detailPayload.shift_type_id || payload.shift_type_id || payload.shift_id || existingDetail.shift_type_id;
   const shiftType = store["shift-types"].find((record) => String(record.id) === String(shiftTypeId));
 
   return {
+    ...(existing || {}),
     id,
     ...payload,
     name: fullName,
-    email: String(payload.email || `employee-${id}@example.com`),
-    role: normalizeRole(String(payload.role || "employee")) === "admin" ? "admin" : "employee",
-    status: String(payload.status || "active"),
+    email: String(payload.email || existing?.email || `employee-${id}@example.com`),
+    role: normalizeRole(String(payload.role || existing?.role || "employee")) === "admin" ? "admin" : "employee",
+    status: String(payload.status || existing?.status || "active"),
     employee_detail: {
-      designation: { id: payload.designation_id || id, name: payload.designation || "Employee" },
+      ...existingDetail,
+      ...detailPayload,
+      employee_id: detailPayload.employee_id || payload.employee_id || existingDetail.employee_id || "",
+      designation_id: designationId,
+      department_id: departmentId,
+      designation: { id: designationId, name: designationName },
       department: {
-        id: payload.department_id || payload.team_id || id,
-        name: payload.department || "General",
-        team_name: payload.department || "General",
+        id: departmentId,
+        name: departmentName,
+        team_name: departmentName,
       },
       shift_type_id: shiftTypeId || null,
-      shift_type: makeShiftSummary(shiftType) || payload.shift_type,
-      joining_date: payload.joining_date || new Date().toISOString().slice(0, 10),
+      shift_type: makeShiftSummary(shiftType) || payload.shift_type || existingDetail.shift_type,
+      joining_date: detailPayload.joining_date || payload.joining_date || existingDetail.joining_date || new Date().toISOString().slice(0, 10),
+      mobile: detailPayload.mobile || payload.mobile || existingDetail.mobile || "",
+      address: detailPayload.address || payload.address || existingDetail.address || "",
     },
-    created_at: new Date().toISOString(),
+    created_at: existing?.created_at || new Date().toISOString(),
   };
 };
 
@@ -1010,7 +1165,11 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
 
   if ((method === "put" || method === "patch") && id) {
     const updatedRecords = records.map((record) =>
-      String(record.id) === id ? { ...record, ...payload, updated_at: new Date().toISOString() } : record,
+      String(record.id) === id
+        ? resource === "employees"
+          ? { ...makeEmployeePayload(store, payload, record.id, record), updated_at: new Date().toISOString() }
+          : { ...record, ...payload, updated_at: new Date().toISOString() }
+        : record,
     );
     setResourceRecords(store, resource, updatedRecords);
     const updated = updatedRecords.find((record) => String(record.id) === id);

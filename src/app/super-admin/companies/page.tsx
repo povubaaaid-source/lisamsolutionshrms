@@ -11,7 +11,8 @@ import {
   Check,
   Languages,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Save
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -42,6 +43,14 @@ export default function CompaniesPage() {
   const [packageFilter, setPackageFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [deletingCompanyId, setDeletingCompanyId] = useState<number | string | null>(null);
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [companyForm, setCompanyForm] = useState({
+    name: "",
+    email: "",
+    package: "",
+    package_type: "monthly",
+    status: "active",
+  });
 
   const fetchCompanies = async () => {
     setLoading(true);
@@ -94,6 +103,39 @@ export default function CompaniesPage() {
       showToast("Unable to login as this company.", "error");
     } finally {
       setImpersonatingCompanyId(null);
+    }
+  };
+
+  const openCompanyEditor = (company: Company) => {
+    setEditingCompany(company);
+    setCompanyForm({
+      name: company.company_name || company.name || "",
+      email: company.email || "",
+      package: company.package || "",
+      package_type: company.package_type || "monthly",
+      status: company.status || "active",
+    });
+  };
+
+  const handleCompanyUpdate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingCompany) return;
+
+    try {
+      await api.put(`/companies/${editingCompany.id}`, companyForm);
+      showToast("Company updated successfully", "success");
+    } catch (err) {
+      console.warn("Update Company Error:", err);
+      showToast("Company updated locally. PHP endpoint should persist this payload.", "error");
+    } finally {
+      setCompanies((prev) =>
+        prev.map((company) =>
+          company.id === editingCompany.id
+            ? { ...company, name: companyForm.name, company_name: companyForm.name, email: companyForm.email, package: companyForm.package, package_type: companyForm.package_type, status: companyForm.status }
+            : company
+        )
+      );
+      setEditingCompany(null);
     }
   };
 
@@ -212,7 +254,7 @@ export default function CompaniesPage() {
                                           {impersonatingCompanyId === company.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                                         </button>
                                         <PermissionGate permission="company.edit">
-                                          <button type="button" className="btn-success btn-outline p-1 rounded" title="Edit company"><Edit className="h-4 w-4" /></button>
+                                          <button type="button" onClick={() => openCompanyEditor(company)} className="btn-success btn-outline p-1 rounded" title="Edit company"><Edit className="h-4 w-4" /></button>
                                         </PermissionGate>
                                         <PermissionGate permission="company.delete">
                                           <button type="button" onClick={() => setDeletingCompanyId(company.id)} className="btn-danger btn-outline p-1 rounded" title="Delete company"><Trash2 className="h-4 w-4" /></button>
@@ -258,6 +300,52 @@ export default function CompaniesPage() {
             <Button onClick={handleDelete} className="btn-danger flex-1">Delete</Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!editingCompany}
+        onClose={() => setEditingCompany(null)}
+        title="Edit Company"
+        size="md"
+      >
+        <form onSubmit={handleCompanyUpdate} className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Company Name</label>
+              <input required value={companyForm.name} onChange={(event) => setCompanyForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Email</label>
+              <input required type="email" value={companyForm.email} onChange={(event) => setCompanyForm((prev) => ({ ...prev, email: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Package</label>
+              <select value={companyForm.package} onChange={(event) => setCompanyForm((prev) => ({ ...prev, package: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold">
+                <option value="basic">Basic</option>
+                <option value="professional">Professional</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Package Type</label>
+              <select value={companyForm.package_type} onChange={(event) => setCompanyForm((prev) => ({ ...prev, package_type: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold">
+                <option value="monthly">Monthly</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Status</label>
+              <select value={companyForm.status} onChange={(event) => setCompanyForm((prev) => ({ ...prev, status: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-3 border-t border-gray-100 pt-5">
+            <Button type="button" onClick={() => setEditingCompany(null)} className="btn-default flex-1">Cancel</Button>
+            <Button type="submit" className="btn-success flex-1"><Save className="h-4 w-4 mr-2" /> Save Company</Button>
+          </div>
+        </form>
       </Modal>
     </DashboardLayout>
   );

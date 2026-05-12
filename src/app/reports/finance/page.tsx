@@ -3,17 +3,18 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import StableResponsiveContainer from "@/components/charts/StableResponsiveContainer";
 import { Filter, RefreshCw, DollarSign, Calendar, TrendingUp, TrendingDown, CreditCard, Download, Search, Briefcase, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 
 const financeData = [
-  { id: 1, invoice: "INV-001", client: "Acme Corp", total: 1500.00, paid: 1500.00, date: "2026-05-01", status: "Paid" },
-  { id: 2, invoice: "INV-002", client: "Globex Corp", total: 2200.00, paid: 0.00, date: "2026-05-02", status: "Unpaid" },
-  { id: 3, invoice: "INV-003", client: "Initech", total: 800.00, paid: 400.00, date: "2026-05-03", status: "Partial" },
-  { id: 4, invoice: "INV-004", client: "Umbrella Corp", total: 3500.00, paid: 3500.00, date: "2026-05-04", status: "Paid" },
-  { id: 5, invoice: "INV-005", client: "Wayne Ent", total: 12000.00, paid: 6000.00, date: "2026-05-05", status: "Partial" },
+  { id: 1, invoice: "INV-001", client: "Acme Corp", project: "Website Redesign", total: 1500.00, paid: 1500.00, date: "2026-05-01", status: "Paid" },
+  { id: 2, invoice: "INV-002", client: "Globex Corp", project: "Mobile App", total: 2200.00, paid: 0.00, date: "2026-05-02", status: "Unpaid" },
+  { id: 3, invoice: "INV-003", client: "Initech", project: "API Integration", total: 800.00, paid: 400.00, date: "2026-05-03", status: "Partial" },
+  { id: 4, invoice: "INV-004", client: "Umbrella Corp", project: "Website Redesign", total: 3500.00, paid: 3500.00, date: "2026-05-04", status: "Paid" },
+  { id: 5, invoice: "INV-005", client: "Wayne Ent", project: "Mobile App", total: 12000.00, paid: 6000.00, date: "2026-05-05", status: "Partial" },
 ];
 
 const chartData = [
@@ -27,11 +28,41 @@ const chartData = [
 
 export default function FinanceReportPage() {
   const [loading, setLoading] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [clientFilter, setClientFilter] = useState("");
 
   const handleRefresh = () => {
     setLoading(true);
     setTimeout(() => setLoading(false), 800);
   };
+
+  const handleReset = () => {
+    setDateFrom("");
+    setDateTo("");
+    setProjectFilter("");
+    setClientFilter("");
+  };
+
+  const filteredFinanceData = financeData.filter((row) => {
+    const startMatch = !dateFrom || row.date >= dateFrom;
+    const endMatch = !dateTo || row.date <= dateTo;
+    const projectMatch = !projectFilter || row.project === projectFilter;
+    const clientMatch = !clientFilter || row.client === clientFilter;
+    return startMatch && endMatch && projectMatch && clientMatch;
+  });
+  const financeTotals = filteredFinanceData.reduce(
+    (total, row) => ({
+      invoice: total.invoice + row.total,
+      paid: total.paid + row.paid,
+      unpaid: total.unpaid + (row.status === "Unpaid" ? row.total : 0),
+      partial: total.partial + (row.status === "Partial" ? row.total - row.paid : 0),
+    }),
+    { invoice: 0, paid: 0, unpaid: 0, partial: 0 },
+  );
+  const projectOptions = Array.from(new Set(financeData.map((row) => row.project)));
+  const clientOptions = Array.from(new Set(financeData.map((row) => row.client)));
 
   return (
     <DashboardLayout>
@@ -63,41 +94,44 @@ export default function FinanceReportPage() {
         <Card className="border-none shadow-sm p-6 bg-white mb-6">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="md:col-span-3">
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Date Range</label>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">From Date</label>
               <div className="relative">
                 <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                <div className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-4 text-xs font-bold text-gray-500 cursor-pointer">
-                   Select Date Range
-                </div>
+                <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full bg-gray-50/50 rounded-xl py-3 pl-11 pr-4 text-xs font-bold text-gray-500" />
               </div>
             </div>
             <div className="md:col-span-3">
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">To Date</label>
+              <div className="relative">
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-full bg-gray-50/50 rounded-xl py-3 pl-11 pr-4 text-xs font-bold text-gray-500" />
+              </div>
+            </div>
+            <div className="md:col-span-2">
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Project</label>
               <div className="relative">
                 <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                <select className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-10 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
+                <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} className="w-full bg-gray-50/50 rounded-xl py-3 pl-11 pr-10 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
                   <option value="">All Projects</option>
-                  <option>Website Redesign</option>
-                  <option>Mobile App</option>
+                  {projectOptions.map((project) => <option key={project} value={project}>{project}</option>)}
                 </select>
               </div>
             </div>
-            <div className="md:col-span-3">
+            <div className="md:col-span-2">
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Client</label>
               <div className="relative">
                 <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                <select className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-10 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
+                <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className="w-full bg-gray-50/50 rounded-xl py-3 pl-11 pr-10 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
                   <option value="">All Clients</option>
-                  <option>Acme Corp</option>
-                  <option>Globex Corp</option>
+                  {clientOptions.map((client) => <option key={client} value={client}>{client}</option>)}
                 </select>
               </div>
             </div>
-            <div className="md:col-span-3 flex items-end space-x-2">
-              <Button className="flex-1 bg-primary text-white text-[10px] font-black h-11 uppercase tracking-widest">
+            <div className="md:col-span-2 flex items-end space-x-2">
+              <Button onClick={handleRefresh} className="flex-1 bg-primary text-white text-[10px] font-black h-11 uppercase tracking-widest">
                 Apply
               </Button>
-              <Button className="bg-gray-100 text-gray-500 border-none px-6 h-11 text-[10px] font-black uppercase tracking-widest">
+              <Button onClick={handleReset} className="bg-gray-100 text-gray-500 border-none px-6 h-11 text-[10px] font-black uppercase tracking-widest">
                 Reset
               </Button>
             </div>
@@ -107,10 +141,10 @@ export default function FinanceReportPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           {[
-            { label: "Total Invoices", value: "$32,400", icon: DollarSign, color: "text-blue-500", bg: "bg-blue-50" },
-            { label: "Total Paid", value: "$25,900", icon: TrendingUp, color: "text-green-500", bg: "bg-green-50" },
-            { label: "Total Unpaid", value: "$6,500", icon: TrendingDown, color: "text-red-500", bg: "bg-red-50" },
-            { label: "Total Partial", value: "$1,200", icon: CreditCard, color: "text-yellow-500", bg: "bg-yellow-50" },
+            { label: "Total Invoices", value: `$${financeTotals.invoice.toLocaleString()}`, icon: DollarSign, color: "text-blue-500", bg: "bg-blue-50" },
+            { label: "Total Paid", value: `$${financeTotals.paid.toLocaleString()}`, icon: TrendingUp, color: "text-green-500", bg: "bg-green-50" },
+            { label: "Total Unpaid", value: `$${financeTotals.unpaid.toLocaleString()}`, icon: TrendingDown, color: "text-red-500", bg: "bg-red-50" },
+            { label: "Total Partial", value: `$${financeTotals.partial.toLocaleString()}`, icon: CreditCard, color: "text-yellow-500", bg: "bg-yellow-50" },
           ].map((stat, i) => (
             <Card key={i} className="p-6 border-none shadow-sm bg-white flex items-center justify-between group hover:shadow-md transition-all">
               <div>
@@ -130,34 +164,32 @@ export default function FinanceReportPage() {
             <TrendingUp className="h-4 w-4 mr-2 text-primary" />
             Monthly Earning Trends
           </h3>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis 
-                  dataKey="month" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 'bold', fill: '#9ca3af' }}
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 'bold', fill: '#9ca3af' }}
-                />
-                <Tooltip 
-                  cursor={{ fill: '#f9fafb' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
-                />
-                <Bar dataKey="earning" radius={[6, 6, 0, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index === chartData.length - 1 ? '#10b981' : '#d1fae5'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <StableResponsiveContainer height={288}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+              <XAxis 
+                dataKey="month" 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fontSize: 10, fontWeight: 'bold', fill: '#9ca3af' }}
+                dy={10}
+              />
+              <YAxis 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fontSize: 10, fontWeight: 'bold', fill: '#9ca3af' }}
+              />
+              <Tooltip 
+                cursor={{ fill: '#f9fafb' }}
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
+              />
+              <Bar dataKey="earning" radius={[6, 6, 0, 0]}>
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={index === chartData.length - 1 ? '#10b981' : '#d1fae5'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </StableResponsiveContainer>
           <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center text-[10px] text-gray-400 font-bold uppercase tracking-widest">
             <span className="text-red-500 mr-2">Note:</span> 
             Earnings are based on paid and partial payments received within the selected date range.
@@ -186,7 +218,7 @@ export default function FinanceReportPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {financeData.map((row, i) => (
+                {filteredFinanceData.map((row, i) => (
                   <tr key={row.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-6 py-4 text-xs text-gray-300 font-bold text-center">{i + 1}</td>
                     <td className="px-6 py-4 text-xs font-black text-primary uppercase tracking-tight hover:underline cursor-pointer">{row.invoice}</td>
@@ -203,6 +235,13 @@ export default function FinanceReportPage() {
                     </td>
                   </tr>
                 ))}
+                {filteredFinanceData.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      No payment records found for selected filters
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -211,4 +250,3 @@ export default function FinanceReportPage() {
     </DashboardLayout>
   );
 }
-

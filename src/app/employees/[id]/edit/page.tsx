@@ -52,6 +52,9 @@ type EmployeeUpdatePayload = {
   email: string;
   role: "admin" | "employee";
   password?: string;
+  department_id: string;
+  designation_id: string;
+  shift_type_id?: string;
   employee_detail: {
     employee_id: string;
     joining_date: string;
@@ -128,6 +131,9 @@ export default function EditEmployeePage() {
         name: data.name,
         email: data.email,
         role: data.role,
+        department_id: data.department_id,
+        designation_id: data.designation_id,
+        shift_type_id: data.shift_type_id,
         employee_detail: {
           employee_id: data.employee_id,
           joining_date: data.joining_date,

@@ -1,6 +1,7 @@
 export type ApiResource =
   | "account-setup"
   | "attendance"
+  | "attendance-settings"
   | "billing"
   | "clients"
   | "companies"
@@ -16,6 +17,8 @@ export type ApiResource =
   | "events"
   | "expenses"
   | "holidays"
+  | "employee-docs"
+  | "leave-quotas"
   | "invoices"
   | "leads"
   | "leaves"
@@ -30,7 +33,8 @@ export type ApiResource =
   | "shift-types"
   | "tasks"
   | "tickets"
-  | "time-logs";
+  | "time-logs"
+  | "user-activities";
 
 export type ApiEnvelope<T> = {
   success: boolean;
@@ -69,9 +73,12 @@ const singularResourceMap: Record<string, string> = {
   employee: "employees",
   "employee-faq": "employee-faqs",
   "employee-faq-category": "employee-faq-categories",
+  "employee-doc": "employee-docs",
+  "employee-docs": "employee-docs",
   estimate: "estimates",
   event: "events",
   expense: "expenses",
+  holiday: "holidays",
   invoice: "invoices",
   lead: "leads",
   "lead-category": "lead-categories",
@@ -80,6 +87,7 @@ const singularResourceMap: Record<string, string> = {
   leave: "leaves",
   "leave-type": "leave-types",
   leaveType: "leave-types",
+  "leave-quota": "leave-quotas",
   notice: "notices",
   payment: "payments",
   product: "products",
@@ -95,6 +103,7 @@ const singularResourceMap: Record<string, string> = {
   team: "teams",
   ticket: "tickets",
   "time-log": "time-logs",
+  "user-activity": "user-activities",
 };
 
 const nestedRouteMap: Record<string, string> = {

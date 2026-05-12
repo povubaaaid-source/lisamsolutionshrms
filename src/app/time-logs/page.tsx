@@ -1,6 +1,11 @@
+"use client";
+
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, Filter, RefreshCw, Edit, Trash2, Eye, Calendar, User, Clock, Timer } from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import Button from "@/components/ui/Button";
+import { Plus, RefreshCw, Edit, Trash2, Eye, Calendar, User, Clock, Timer, AlertTriangle } from "lucide-react";
+import { useState } from "react";
 
 const timeLogs = [
   { id: 1, employee: "John Doe", project: "Website Redesign", task: "Design Homepage", startTime: "2026-05-01 09:00 AM", endTime: "2026-05-01 01:00 PM", totalHours: "4 Hrs", status: "Approved" },
@@ -11,6 +16,42 @@ const timeLogs = [
 ];
 
 export default function TimeLogsPage() {
+  const [logs, setLogs] = useState(timeLogs);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [taskFilter, setTaskFilter] = useState("all");
+  const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [viewingLog, setViewingLog] = useState<(typeof timeLogs)[number] | null>(null);
+  const [deletingLog, setDeletingLog] = useState<(typeof timeLogs)[number] | null>(null);
+
+  const projectOptions = Array.from(new Set(logs.map((log) => log.project)));
+  const taskOptions = Array.from(new Set(logs.map((log) => log.task)));
+  const employeeOptions = Array.from(new Set(logs.map((log) => log.employee)));
+  const filteredLogs = logs.filter((log) => {
+    const logDate = log.startTime.slice(0, 10);
+    const startMatch = !dateFrom || logDate >= dateFrom;
+    const endMatch = !dateTo || logDate <= dateTo;
+    const projectMatch = projectFilter === "all" || log.project === projectFilter;
+    const taskMatch = taskFilter === "all" || log.task === taskFilter;
+    const employeeMatch = employeeFilter === "all" || log.employee === employeeFilter;
+    return startMatch && endMatch && projectMatch && taskMatch && employeeMatch;
+  });
+
+  const resetFilters = () => {
+    setDateFrom("");
+    setDateTo("");
+    setProjectFilter("all");
+    setTaskFilter("all");
+    setEmployeeFilter("all");
+  };
+
+  const deleteLog = () => {
+    if (!deletingLog) return;
+    setLogs((current) => current.filter((log) => log.id !== deletingLog.id));
+    setDeletingLog(null);
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-5">
@@ -31,9 +72,9 @@ export default function TimeLogsPage() {
             <Link href="/time-logs/by-employee" className="flex items-center space-x-1 rounded border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-500 hover:bg-blue-500 hover:text-white transition-colors">
               <User className="h-3.5 w-3.5" /><span>By Employee</span>
             </Link>
-            <button className="flex items-center space-x-1 rounded border border-green-500 px-3 py-1.5 text-xs font-semibold text-green-600 hover:bg-green-500 hover:text-white transition-colors">
+            <Link href="/time-logs/create" className="flex items-center space-x-1 rounded border border-green-500 px-3 py-1.5 text-xs font-semibold text-green-600 hover:bg-green-500 hover:text-white transition-colors">
               <Clock className="h-3.5 w-3.5" /><span>Log Time</span>
-            </button>
+            </Link>
             <ol className="flex text-sm text-gray-500 space-x-1">
               <li><Link href="/dashboard" className="hover:text-primary">Home</Link></li>
               <li>/</li>
@@ -44,35 +85,39 @@ export default function TimeLogsPage() {
 
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Select Date Range</label>
-              <input type="text" placeholder="Select date range" className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary" readOnly />
+              <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+              <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+              <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Select Project</label>
-              <select className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary">
-                <option value="all">All</option><option>Website Redesign</option><option>Mobile App</option>
+              <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary">
+                <option value="all">All</option>
+                {projectOptions.map((project) => <option key={project} value={project}>{project}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Select Task</label>
-              <select className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary">
-                <option value="all">All</option><option>Design Homepage</option><option>Bug Fixing</option>
+              <select value={taskFilter} onChange={(event) => setTaskFilter(event.target.value)} className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary">
+                <option value="all">All</option>
+                {taskOptions.map((task) => <option key={task} value={task}>{task}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Employee Name</label>
-              <select className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary">
-                <option value="all">All</option><option>John Doe</option><option>Jane Smith</option>
+              <select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} className="w-full rounded border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-primary">
+                <option value="all">All</option>
+                {employeeOptions.map((employee) => <option key={employee} value={employee}>{employee}</option>)}
               </select>
             </div>
           </div>
-          <div className="mt-4 flex items-center space-x-2">
-            <button className="flex items-center space-x-1 rounded bg-green-500 px-4 py-2 text-xs font-semibold text-white hover:bg-green-600">
-              <Filter className="h-3.5 w-3.5" /><span>Apply</span>
-            </button>
-            <button className="flex items-center space-x-1 rounded bg-gray-600 px-4 py-2 text-xs font-semibold text-white hover:bg-gray-700">
+          <div className="mt-4 flex items-center justify-end space-x-2">
+            <button onClick={resetFilters} className="flex items-center space-x-1 rounded bg-gray-600 px-4 py-2 text-xs font-semibold text-white hover:bg-gray-700">
               <RefreshCw className="h-3.5 w-3.5" /><span>Reset</span>
             </button>
           </div>
@@ -96,7 +141,7 @@ export default function TimeLogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {timeLogs.map((log) => (
+                {filteredLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-xs text-gray-500">{log.id}</td>
                     <td className="px-4 py-3 text-xs font-medium text-gray-800">{log.employee}</td>
@@ -114,17 +159,48 @@ export default function TimeLogsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center space-x-1.5">
-                        <button className="text-blue-400 hover:text-blue-600"><Edit className="h-4 w-4" /></button>
-                        <button className="text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => setViewingLog(log)} className="text-primary hover:text-blue-600" title="View"><Eye className="h-4 w-4" /></button>
+                        <Link href={`/time-logs/create?edit=${log.id}`} className="text-blue-400 hover:text-blue-600" title="Edit"><Edit className="h-4 w-4" /></Link>
+                        <button onClick={() => setDeletingLog(log)} className="text-red-400 hover:text-red-600" title="Delete"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
                   </tr>
                 ))}
+                {filteredLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-12 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      No time logs found for selected filters
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+      <Modal isOpen={Boolean(viewingLog)} onClose={() => setViewingLog(null)} title="Time Log Details" size="lg">
+        {viewingLog && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {Object.entries(viewingLog).map(([key, value]) => (
+              <div key={key} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{key.replace(/([A-Z])/g, " $1")}</p>
+                <p className="mt-1 text-sm font-bold text-gray-800">{String(value)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      <Modal isOpen={Boolean(deletingLog)} onClose={() => setDeletingLog(null)} title="Delete Time Log" size="sm">
+        <div className="py-6 text-center">
+          <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-red-500" />
+          <p className="mb-6 text-xs font-bold text-gray-500">This will remove the selected local time log from the list.</p>
+          <div className="flex gap-3">
+            <Button onClick={() => setDeletingLog(null)} className="flex-1 bg-gray-100 text-gray-500">Cancel</Button>
+            <Button onClick={deleteLog} className="flex-1 bg-red-500 text-white">Delete</Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

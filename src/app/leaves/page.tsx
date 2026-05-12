@@ -9,18 +9,20 @@ import {
   Settings, 
   ChevronLeft, 
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  XCircle
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 
 type LeaveRecord = {
   id: number | string;
-  user?: { name?: string };
-  employee?: { name?: string };
+  user?: { id?: number | string; name?: string };
+  employee?: { id?: number | string; name?: string };
   date?: string;
   leave_date?: string;
   reason?: string;
@@ -29,8 +31,12 @@ type LeaveRecord = {
   leave_type?: { type_name?: string };
 };
 
+const getLeaveUserId = (leave: LeaveRecord) => String(leave.user?.id || leave.employee?.id || "");
+
 export default function LeaveDashboardPage() {
   const { showToast } = useToast();
+  const { user, hasPermission } = useAuth();
+  const canManageCompanyLeaves = user?.role === "admin" || hasPermission("leaves.approve") || hasPermission("leaves.manage");
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
@@ -42,8 +48,11 @@ export default function LeaveDashboardPage() {
     try {
       const response = await api.get("/leave");
       const leaveList = (response.data.data || []) as LeaveRecord[];
-      setLeaves(leaveList);
-      setPendingLeaves(leaveList.filter((leave) => leave.status === "pending"));
+      const scopedLeaves = canManageCompanyLeaves
+        ? leaveList
+        : leaveList.filter((leave) => getLeaveUserId(leave) === String(user?.id) || leave.user?.name === user?.name || leave.employee?.name === user?.name);
+      setLeaves(scopedLeaves);
+      setPendingLeaves(scopedLeaves.filter((leave) => leave.status === "pending"));
     } catch (err) {
       console.error("Fetch Leaves Error:", err);
       showToast("Failed to load leaves", "error");
@@ -67,6 +76,10 @@ export default function LeaveDashboardPage() {
   };
 
   const handleStatus = async (id: number | string, status: "approved" | "rejected") => {
+    if (!canManageCompanyLeaves) {
+      showToast("Only admins can approve or reject leave requests.", "error");
+      return;
+    }
     try {
       await api.patch(`/leave/${id}`, { status });
       setLeaves((prev) => prev.map((leave) => leave.id === id ? { ...leave, status } : leave));
@@ -75,6 +88,20 @@ export default function LeaveDashboardPage() {
     } catch (err) {
       console.error("Update Leave Error:", err);
       showToast("Failed to update leave", "error");
+    }
+  };
+
+  const handleCancel = async (id: number | string) => {
+    try {
+      await api.delete(`/leave/${id}`);
+      setLeaves((prev) => prev.filter((leave) => leave.id !== id));
+      setPendingLeaves((prev) => prev.filter((leave) => leave.id !== id));
+      showToast("Pending leave request cancelled", "success");
+    } catch (err) {
+      console.error("Cancel Leave Error:", err);
+      setLeaves((prev) => prev.filter((leave) => leave.id !== id));
+      setPendingLeaves((prev) => prev.filter((leave) => leave.id !== id));
+      showToast("Leave cancelled locally. PHP endpoint should persist deletion.", "error");
     }
   };
 
@@ -97,23 +124,29 @@ export default function LeaveDashboardPage() {
                     {pendingLeaves.length} Pending
                  </span>
               </div>
-              <p className="text-[10px] text-gray-400 mt-0.5 uppercase">HR / Time Management / Schedule</p>
+              <p className="text-[10px] text-gray-400 mt-0.5 uppercase">
+                {canManageCompanyLeaves ? "HR / Time Management / Schedule" : "Member / My Leaves / Schedule"}
+              </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
+             {canManageCompanyLeaves && (
              <Link href="/leaves/all">
                <Button className="btn-default">
                   <List className="h-4 w-4 mr-2" /> All Leaves
                </Button>
              </Link>
+             )}
+             {canManageCompanyLeaves && (
              <Link href="/leaves/settings">
                <Button className="btn-default p-2">
                   <Settings className="h-4 w-4" />
                </Button>
              </Link>
+             )}
              <Link href="/leaves/create">
                <Button variant="primary">
-                  <Plus className="h-4 w-4 mr-2" /> Assign Leave
+                  <Plus className="h-4 w-4 mr-2" /> {canManageCompanyLeaves ? "Assign Leave" : "Apply Leave"}
                </Button>
              </Link>
              <Button onClick={fetchData} className="btn-default p-2">
@@ -179,7 +212,7 @@ export default function LeaveDashboardPage() {
            {/* Pending & Actions Column */}
            <div className="lg:col-span-4 space-y-6">
               <Card className="p-6">
-                 <h4 className="mb-4">Pending Requests</h4>
+                 <h4 className="mb-4">{canManageCompanyLeaves ? "Pending Requests" : "My Pending Requests"}</h4>
                  <div className="space-y-4">
                     {pendingLeaves.length > 0 ? pendingLeaves.map((request) => (
                       <div key={request.id} className="p-4 bg-gray-50 border border-[#f2f2f3]">
@@ -189,8 +222,16 @@ export default function LeaveDashboardPage() {
                          </div>
                          <div className="text-[11px] text-gray-500 mb-3">{request.reason}</div>
                          <div className="flex space-x-2">
+                            {canManageCompanyLeaves ? (
+                              <>
                             <Button onClick={() => handleStatus(request.id, "approved")} className="btn-success p-1 text-[10px]">Approve</Button>
                             <Button onClick={() => handleStatus(request.id, "rejected")} className="btn-danger p-1 text-[10px]">Reject</Button>
+                              </>
+                            ) : (
+                              <Button onClick={() => handleCancel(request.id)} className="btn-danger p-1 text-[10px]">
+                                <XCircle className="h-3 w-3 mr-1" /> Cancel Request
+                              </Button>
+                            )}
                          </div>
                       </div>
                     )) : (
@@ -200,12 +241,18 @@ export default function LeaveDashboardPage() {
               </Card>
 
               <div className="white-box bg-secondary text-white">
-                 <h4 className="text-white mb-4">Quick Search</h4>
+                 <h4 className="text-white mb-4">{canManageCompanyLeaves ? "Quick Search" : "My Leave Scope"}</h4>
+                 {canManageCompanyLeaves ? (
                  <input 
                    type="text" 
                    placeholder="FIND STAFF..."
                    className="form-control bg-white/10 border-white/20 text-white"
                  />
+                 ) : (
+                  <p className="text-xs font-bold leading-relaxed text-white/75">
+                    Employees can apply for their own leave and cancel pending requests. Approval, rejection, assignment to another employee, and settings remain admin-only.
+                  </p>
+                 )}
               </div>
            </div>
         </div>

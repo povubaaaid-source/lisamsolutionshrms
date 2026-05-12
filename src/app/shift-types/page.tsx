@@ -12,6 +12,7 @@ import {
   Search,
   ShieldCheck,
   Trash2,
+  Users,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Button from "@/components/ui/Button";
@@ -36,6 +37,25 @@ type ShiftType = {
   status: "active" | "inactive";
   color: string;
   description: string;
+};
+
+type EmployeeWithShift = {
+  id: number | string;
+  name: string;
+  email?: string;
+  status?: string;
+  employee_detail?: {
+    designation?: { name?: string };
+    department?: { name?: string; team_name?: string };
+    shift_type_id?: number | string | null;
+    shift_type?: {
+      id?: number | string;
+      shift_name?: string;
+      code?: string;
+      start_time?: string;
+      end_time?: string;
+    };
+  };
 };
 
 type ShiftFormValues = Omit<ShiftType, "id" | "break_minutes" | "late_grace_minutes" | "early_clock_in_minutes" | "min_hours"> & {
@@ -95,6 +115,13 @@ function extractRecord(payload: unknown): ShiftType | null {
   return root?.data && typeof root.data === "object" ? (root.data as ShiftType) : null;
 }
 
+function extractEmployeeRecords(payload: unknown): EmployeeWithShift[] {
+  const root = payload as { data?: unknown } | null;
+  const data = root && typeof root === "object" && "data" in root ? root.data : payload;
+  if (!Array.isArray(data)) return [];
+  return data.filter((item): item is EmployeeWithShift => Boolean(item) && typeof item === "object");
+}
+
 function toNumber(value: string, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -149,9 +176,18 @@ function autoAttendanceBadgeClass(value: ShiftType["auto_attendance"]) {
   return "bg-gray-100 text-gray-500";
 }
 
+function getEmployeeShiftId(employee: EmployeeWithShift) {
+  return employee.employee_detail?.shift_type_id || employee.employee_detail?.shift_type?.id || null;
+}
+
+function getEmployeeDepartment(employee: EmployeeWithShift) {
+  return employee.employee_detail?.department?.team_name || employee.employee_detail?.department?.name || "General";
+}
+
 export default function ShiftTypesPage() {
   const { showToast } = useToast();
   const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([]);
+  const [employees, setEmployees] = useState<EmployeeWithShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -159,16 +195,21 @@ export default function ShiftTypesPage() {
   const [formValues, setFormValues] = useState<ShiftFormValues>(emptyForm);
   const [editingShift, setEditingShift] = useState<ShiftType | null>(null);
   const [deletingShift, setDeletingShift] = useState<ShiftType | null>(null);
+  const [viewingAssignedShift, setViewingAssignedShift] = useState<ShiftType | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const fetchShiftTypes = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.get("/shift-types");
-      setShiftTypes(extractRecords(response.data));
+      const [shiftResponse, employeeResponse] = await Promise.all([
+        api.get("/shift-types"),
+        api.get("/employee"),
+      ]);
+      setShiftTypes(extractRecords(shiftResponse.data));
+      setEmployees(extractEmployeeRecords(employeeResponse.data));
     } catch {
-      showToast("Shift Types API is not available yet. Showing local starter data.", "error");
+      showToast("Shift or employee API is not available yet. Showing locally available data.", "error");
     } finally {
       setLoading(false);
     }
@@ -192,12 +233,19 @@ export default function ShiftTypesPage() {
     });
   }, [query, shiftTypes, statusFilter, typeFilter]);
 
+  const getAssignedEmployees = useCallback(
+    (shift: ShiftType) => employees.filter((employee) => String(getEmployeeShiftId(employee)) === String(shift.id)),
+    [employees],
+  );
+
   const stats = useMemo(() => {
     const active = shiftTypes.filter((shift) => shift.status === "active").length;
     const overnight = shiftTypes.filter(isOvernightShift).length;
     const autoAttendance = shiftTypes.filter((shift) => shift.auto_attendance === "enabled").length;
-    return { total: shiftTypes.length, active, overnight, autoAttendance };
-  }, [shiftTypes]);
+    const assignedEmployees = employees.filter((employee) => Boolean(getEmployeeShiftId(employee))).length;
+    const unassignedEmployees = employees.length - assignedEmployees;
+    return { total: shiftTypes.length, active, overnight, autoAttendance, assignedEmployees, unassignedEmployees };
+  }, [employees, shiftTypes]);
 
   const updateField = (field: keyof ShiftFormValues, value: string) => {
     setFormValues((current) => ({ ...current, [field]: value }));
@@ -248,6 +296,13 @@ export default function ShiftTypesPage() {
 
   const handleDelete = async () => {
     if (!deletingShift) return;
+    const assignedEmployees = getAssignedEmployees(deletingShift);
+    if (assignedEmployees.length > 0) {
+      showToast(`Reassign ${assignedEmployees.length} employee(s) before deleting this shift type.`, "error");
+      setDeletingShift(null);
+      return;
+    }
+
     try {
       await api.delete(`/shift-types/${deletingShift.id}`);
       showToast("Shift type deleted successfully.");
@@ -261,7 +316,7 @@ export default function ShiftTypesPage() {
 
   const handleExport = () => {
     const rows = [
-      ["Name", "Code", "Type", "Start", "End", "Break", "Late Grace", "Min Hours", "Auto Attendance", "Status"],
+      ["Name", "Code", "Type", "Start", "End", "Break", "Late Grace", "Min Hours", "Assigned Employees", "Auto Attendance", "Status"],
       ...filteredShiftTypes.map((shift) => [
         shift.shift_name,
         shift.code,
@@ -271,6 +326,7 @@ export default function ShiftTypesPage() {
         String(shift.break_minutes),
         String(shift.late_grace_minutes),
         String(shift.min_hours),
+        String(getAssignedEmployees(shift).length),
         shift.auto_attendance,
         shift.status,
       ]),
@@ -284,6 +340,9 @@ export default function ShiftTypesPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  const viewingAssignedEmployees = viewingAssignedShift ? getAssignedEmployees(viewingAssignedShift) : [];
+  const deletingShiftAssignments = deletingShift ? getAssignedEmployees(deletingShift) : [];
 
   return (
     <DashboardLayout>
@@ -323,12 +382,14 @@ export default function ShiftTypesPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
           {[
             { label: "Total Shifts", value: stats.total, icon: Clock, color: "text-primary", bg: "bg-blue-50" },
             { label: "Active", value: stats.active, icon: ShieldCheck, color: "text-green-600", bg: "bg-green-50" },
             { label: "Overnight", value: stats.overnight, icon: Moon, color: "text-indigo-600", bg: "bg-indigo-50" },
             { label: "Auto Attendance", value: stats.autoAttendance, icon: RefreshCw, color: "text-orange-600", bg: "bg-orange-50" },
+            { label: "Assigned Staff", value: stats.assignedEmployees, icon: Users, color: "text-cyan-600", bg: "bg-cyan-50" },
+            { label: "Unassigned", value: stats.unassignedEmployees, icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50" },
           ].map((item) => (
             <Card key={item.label} className="border-none bg-white p-5 shadow-sm">
               <div className="flex items-center gap-4">
@@ -375,7 +436,7 @@ export default function ShiftTypesPage() {
             <table className="w-full text-left">
               <thead className="border-b border-gray-100 bg-gray-50">
                 <tr>
-                  {["Shift", "Timing", "Attendance Rules", "Auto Attendance", "Status", "Action"].map((heading) => (
+                  {["Shift", "Timing", "Attendance Rules", "Assigned Staff", "Auto Attendance", "Status", "Action"].map((heading) => (
                     <th key={heading} className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">
                       {heading}
                     </th>
@@ -385,65 +446,99 @@ export default function ShiftTypesPage() {
               <tbody className="divide-y divide-gray-50">
                 {loading && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-16 text-center">
+                    <td colSpan={7} className="px-6 py-16 text-center">
                       <RefreshCw className="mx-auto mb-3 h-8 w-8 animate-spin text-primary" />
                       <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Loading shift types</p>
                     </td>
                   </tr>
                 )}
 
-                {!loading && filteredShiftTypes.map((shift) => (
-                  <tr key={shift.id} className="transition-colors hover:bg-gray-50/60">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <span className="h-10 w-1.5 rounded-full" style={{ backgroundColor: shift.color }} />
-                        <div>
-                          <p className="text-xs font-black uppercase tracking-tight text-gray-800">{shift.shift_name}</p>
-                          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                            {shift.code} - {shift.type}
-                          </p>
+                {!loading && filteredShiftTypes.map((shift) => {
+                  const assignedEmployees = getAssignedEmployees(shift);
+
+                  return (
+                    <tr key={shift.id} className="transition-colors hover:bg-gray-50/60">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="h-10 w-1.5 rounded-full" style={{ backgroundColor: shift.color }} />
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-tight text-gray-800">{shift.shift_name}</p>
+                            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                              {shift.code} - {shift.type}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-xs font-black text-gray-700">{shift.start_time} - {shift.end_time}</p>
-                      <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                        {getShiftDuration(shift)} {isOvernightShift(shift) ? "- Overnight" : ""}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="space-y-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                        <p>Break: {shift.break_minutes} min</p>
-                        <p>Late grace: {shift.late_grace_minutes} min</p>
-                        <p>Half day mark: {shift.half_day_mark_time}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${autoAttendanceBadgeClass(shift.auto_attendance)}`}>
-                        {shift.auto_attendance.replace("-", " ")}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${statusBadgeClass(shift.status)}`}>
-                        {shift.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button type="button" onClick={() => openEdit(shift)} className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600" aria-label={`Edit ${shift.shift_name}`}>
-                          <Edit className="h-4 w-4" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-xs font-black text-gray-700">{shift.start_time} - {shift.end_time}</p>
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                          {getShiftDuration(shift)} {isOvernightShift(shift) ? "- Overnight" : ""}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="space-y-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                          <p>Break: {shift.break_minutes} min</p>
+                          <p>Late grace: {shift.late_grace_minutes} min</p>
+                          <p>Half day mark: {shift.half_day_mark_time}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          type="button"
+                          onClick={() => setViewingAssignedShift(shift)}
+                          disabled={assignedEmployees.length === 0}
+                          className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${
+                            assignedEmployees.length > 0
+                              ? "bg-cyan-50 text-cyan-700 hover:bg-cyan-100"
+                              : "cursor-not-allowed bg-gray-50 text-gray-300"
+                          }`}
+                        >
+                          <Users className="h-3.5 w-3.5" />
+                          {assignedEmployees.length} assigned
                         </button>
-                        <button type="button" onClick={() => setDeletingShift(shift)} className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600" aria-label={`Delete ${shift.shift_name}`}>
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${autoAttendanceBadgeClass(shift.auto_attendance)}`}>
+                          {shift.auto_attendance.replace("-", " ")}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${statusBadgeClass(shift.status)}`}>
+                          {shift.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button type="button" onClick={() => openEdit(shift)} className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600" aria-label={`Edit ${shift.shift_name}`}>
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (assignedEmployees.length > 0) {
+                                showToast(`Reassign ${assignedEmployees.length} employee(s) before deleting this shift type.`, "error");
+                                return;
+                              }
+                              setDeletingShift(shift);
+                            }}
+                            className={`rounded-lg p-2 transition-colors ${
+                              assignedEmployees.length > 0
+                                ? "text-gray-300 hover:bg-gray-50"
+                                : "text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            }`}
+                            aria-label={`Delete ${shift.shift_name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {!loading && filteredShiftTypes.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-16 text-center">
+                    <td colSpan={7} className="px-6 py-16 text-center">
                       <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-gray-200" />
                       <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">No shift types found</p>
                     </td>
@@ -558,15 +653,76 @@ export default function ShiftTypesPage() {
           </div>
           <h3 className="text-lg font-black uppercase tracking-tight text-gray-800">Delete this shift?</h3>
           <p className="mx-auto mt-2 max-w-xs text-[11px] font-bold uppercase tracking-widest text-gray-400">
-            Existing attendance history should keep its stored timings, but new assignments should use another active shift.
+            {deletingShiftAssignments.length > 0
+              ? `${deletingShiftAssignments.length} employee(s) are still assigned. Reassign them before deleting.`
+              : "Existing attendance history should keep its stored timings, but new assignments should use another active shift."}
           </p>
           <div className="mt-8 flex gap-4">
             <Button type="button" onClick={() => setDeletingShift(null)} className="h-12 flex-1 border-none bg-gray-100 text-[10px] font-black uppercase tracking-widest text-gray-500">
               Cancel
             </Button>
-            <Button type="button" onClick={handleDelete} className="h-12 flex-1 bg-red-500 text-[10px] font-black uppercase tracking-widest text-white">
+            <Button type="button" onClick={handleDelete} disabled={deletingShiftAssignments.length > 0} className="h-12 flex-1 bg-red-500 text-[10px] font-black uppercase tracking-widest text-white">
               Delete
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(viewingAssignedShift)}
+        onClose={() => setViewingAssignedShift(null)}
+        title={viewingAssignedShift ? `${viewingAssignedShift.shift_name} Assignments` : "Shift Assignments"}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-cyan-700">Assignment Coverage</p>
+            <p className="mt-1 text-sm font-bold text-gray-700">
+              {viewingAssignedEmployees.length} employee(s) use this shift for attendance defaults, late marking, and half-day calculation.
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-gray-100">
+            <table className="w-full text-left">
+              <thead className="bg-gray-50">
+                <tr>
+                  {["Employee", "Department", "Designation", "Status"].map((heading) => (
+                    <th key={heading} className="px-5 py-3 text-[9px] font-black uppercase tracking-widest text-gray-400">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {viewingAssignedEmployees.map((employee) => (
+                  <tr key={employee.id}>
+                    <td className="px-5 py-4">
+                      <p className="text-xs font-black text-gray-800">{employee.name}</p>
+                      <p className="mt-1 text-[10px] font-bold text-gray-400">{employee.email || "No email"}</p>
+                    </td>
+                    <td className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      {getEmployeeDepartment(employee)}
+                    </td>
+                    <td className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      {employee.employee_detail?.designation?.name || "Staff"}
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="rounded-full bg-gray-100 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500">
+                        {employee.status || "active"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+
+                {viewingAssignedEmployees.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-12 text-center text-[10px] font-black uppercase tracking-widest text-gray-300">
+                      No employees are assigned to this shift
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </Modal>

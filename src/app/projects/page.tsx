@@ -2,7 +2,7 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, RefreshCw, Edit, Trash2, Eye, AlertTriangle } from "lucide-react";
+import { Plus, RefreshCw, Edit, Trash2, Eye, AlertTriangle, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -26,6 +26,7 @@ export default function ProjectsPage() {
   const { showToast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [clientFilter, setClientFilter] = useState("All");
   const [deletingProjectId, setDeletingProjectId] = useState<number | string | null>(null);
@@ -52,9 +53,18 @@ export default function ProjectsPage() {
   }, []);
 
   const filteredProjects = projects.filter(proj => {
+    const query = searchTerm.trim().toLowerCase();
+    const searchText = [
+      proj.project_name,
+      proj.status,
+      proj.client?.name,
+      proj.deadline,
+      ...(proj.members || []).map((member) => member.name),
+    ].filter(Boolean).join(" ").toLowerCase();
+    const searchMatch = !query || searchText.includes(query);
     const statusMatch = statusFilter === "All" || proj.status.toLowerCase() === statusFilter.toLowerCase();
     const clientMatch = clientFilter === "All" || proj.client?.name === clientFilter;
-    return statusMatch && clientMatch;
+    return searchMatch && statusMatch && clientMatch;
   });
 
   const handleDelete = async () => {
@@ -72,6 +82,7 @@ export default function ProjectsPage() {
   };
 
   const handleReset = () => {
+    setSearchTerm("");
     setStatusFilter("All");
     setClientFilter("All");
   };
@@ -103,7 +114,20 @@ export default function ProjectsPage() {
 
         {/* Filters */}
         <Card className="p-5 border-none shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            <div className="lg:col-span-2">
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="w-full rounded-lg border border-gray-100 bg-white py-2 pl-9 pr-3 text-xs font-bold outline-none transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  placeholder="Search project, client, member"
+                  type="search"
+                />
+              </div>
+            </div>
             <div>
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Status</label>
               <select 
@@ -132,7 +156,6 @@ export default function ProjectsPage() {
                 ))}
               </select>
             </div>
-            <div className="lg:col-span-1"></div>
             <div className="flex justify-end">
               <button 
                 onClick={handleReset}

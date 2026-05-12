@@ -9,14 +9,23 @@ import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Drawer from "@/components/ui/Drawer";
 import api from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
 
 export default function ProductsPage() {
+  const { showToast } = useToast();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
+  const [productForm, setProductForm] = useState({
+    name: "",
+    price: "",
+    category: "Service",
+    description: "",
+  });
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -25,6 +34,7 @@ export default function ProductsPage() {
       setProducts(response.data.data);
     } catch (err) {
       console.error("Fetch Products Error:", err);
+      showToast("Failed to load products", "error");
     } finally {
       setLoading(false);
     }
@@ -34,22 +44,69 @@ export default function ProductsPage() {
     fetchProducts();
   }, []);
 
+  const openProductEditor = (product?: any) => {
+    setEditingProduct(product || null);
+    setProductForm({
+      name: product?.name || "",
+      price: String(product?.price || ""),
+      category: product?.category || "Service",
+      description: product?.description || "",
+    });
+    setIsAddOpen(true);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const payload = { ...productForm };
+
+    try {
+      if (editingProduct) {
+        await api.put(`/product/${editingProduct.id}`, payload);
+        setProducts((prev) => prev.map((product) => product.id === editingProduct.id ? { ...product, ...payload } : product));
+        showToast("Product updated successfully", "success");
+      } else {
+        const response = await api.post("/product", payload);
+        setProducts((prev) => [...prev, response.data.data || { id: Date.now(), ...payload }]);
+        showToast("Product created successfully", "success");
+      }
+      setIsAddOpen(false);
+    } catch (err) {
+      console.error("Save Product Error:", err);
+      if (editingProduct) {
+        setProducts((prev) => prev.map((product) => product.id === editingProduct.id ? { ...product, ...payload } : product));
+        showToast("Product saved locally. PHP endpoint needs to persist it.", "error");
+      } else {
+        setProducts((prev) => [...prev, { id: Date.now(), ...payload }]);
+        showToast("Product added locally. PHP endpoint needs to persist it.", "error");
+      }
+      setIsAddOpen(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (deletingProductId) {
       try {
         await api.delete(`/product/${deletingProductId}`);
         setProducts(prev => prev.filter(p => p.id !== deletingProductId));
+        showToast("Product deleted successfully", "success");
         setDeletingProductId(null);
       } catch (err) {
         console.error("Delete Product Error:", err);
-        alert("Failed to delete product");
+        setProducts(prev => prev.filter(p => p.id !== deletingProductId));
+        showToast("Product removed locally. PHP endpoint needs to persist it.", "error");
+        setDeletingProductId(null);
       }
     }
   };
 
+  const categories = Array.from(new Set(products.map((product) => product.category).filter(Boolean)));
   const filteredProducts = products.filter(p => {
-    const matchesSearch = searchTerm ? p.name?.toLowerCase().includes(searchTerm.toLowerCase()) : true;
-    return matchesSearch;
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = searchTerm
+      ? [p.name, p.description, p.category, p.price].some((value) => String(value || "").toLowerCase().includes(search))
+      : true;
+    const matchesCategory = categoryFilter === "All Categories" || p.category === categoryFilter;
+    return matchesSearch && matchesCategory;
   });
 
   return (
@@ -73,7 +130,7 @@ export default function ProductsPage() {
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <Button 
-                onClick={() => setIsAddOpen(true)}
+                onClick={() => openProductEditor()}
                 className="bg-primary text-white text-[10px] font-black px-6 h-10 uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
               <Plus className="h-3.5 w-3.5 mr-2" /> Add Product
@@ -89,7 +146,7 @@ export default function ProductsPage() {
               <input
                 type="text"
                 placeholder="Search products by name..."
-                className="w-full pl-12 pr-4 py-3 bg-gray-50 border-none rounded-xl text-xs font-bold focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-gray-300"
+                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-gray-300"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -98,9 +155,12 @@ export default function ProductsPage() {
               <select 
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-xs font-bold focus:ring-1 focus:ring-primary outline-none transition-all appearance-none cursor-pointer"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-1 focus:ring-primary outline-none transition-all appearance-none cursor-pointer"
               >
                 <option>All Categories</option>
+                {categories.map((category) => (
+                  <option key={category}>{category}</option>
+                ))}
               </select>
             </div>
             <Button 
@@ -124,12 +184,13 @@ export default function ProductsPage() {
               <div className="h-44 bg-gray-50/50 flex items-center justify-center relative overflow-hidden">
                 <ShoppingBag className="h-14 w-14 text-gray-200 group-hover:scale-110 group-hover:text-primary/20 transition-all duration-500" />
                 <div className="absolute top-3 right-3 flex flex-col space-y-2 opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-300">
-                   <button className="p-2.5 bg-white rounded-xl shadow-xl text-blue-500 hover:bg-blue-500 hover:text-white transition-all"><Edit className="h-4 w-4" /></button>
+                   <button onClick={() => openProductEditor(product)} className="p-2.5 bg-white rounded-xl shadow-xl text-blue-500 hover:bg-blue-500 hover:text-white transition-all" title="Edit product"><Edit className="h-4 w-4" /></button>
                    <button onClick={() => setDeletingProductId(product.id)} className="p-2.5 bg-white rounded-xl shadow-xl text-red-500 hover:bg-red-500 hover:text-white transition-all"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
               <div className="p-6">
                 <h3 className="text-xs font-black text-gray-800 mb-1 line-clamp-1 group-hover:text-primary transition-colors">{product.name}</h3>
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">{product.category || "Uncategorized"}</p>
                 
                 <div className="flex items-end justify-between mt-4">
                   <div>
@@ -159,22 +220,39 @@ export default function ProductsPage() {
       <Drawer
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
-        title="Add New Product"
+        title={editingProduct ? "Edit Product" : "Add New Product"}
       >
-        <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); setIsAddOpen(false); }}>
+        <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product Name *</label>
-            <input type="text" className="w-full bg-gray-50 border-none rounded-xl p-3.5 text-xs font-bold focus:ring-1 focus:ring-primary outline-none" required />
+            <input
+              type="text"
+              value={productForm.name}
+              onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs font-bold focus:ring-1 focus:ring-primary outline-none"
+              required
+            />
           </div>
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Price *</label>
-              <input type="text" className="w-full bg-gray-50 border-none rounded-xl p-3.5 text-xs font-bold focus:ring-1 focus:ring-primary outline-none" placeholder="$ 0.00" required />
+              <input
+                type="text"
+                value={productForm.price}
+                onChange={(event) => setProductForm((prev) => ({ ...prev, price: event.target.value }))}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs font-bold focus:ring-1 focus:ring-primary outline-none"
+                placeholder="$ 0.00"
+                required
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Category</label>
-              <select className="w-full bg-gray-50 border-none rounded-xl p-3.5 text-xs font-bold focus:ring-1 focus:ring-primary outline-none appearance-none">
+              <select
+                value={productForm.category}
+                onChange={(event) => setProductForm((prev) => ({ ...prev, category: event.target.value }))}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs font-bold focus:ring-1 focus:ring-primary outline-none appearance-none"
+              >
                 <option>Digital</option>
                 <option>Physical</option>
                 <option>Service</option>
@@ -184,7 +262,11 @@ export default function ProductsPage() {
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Description</label>
-            <textarea className="w-full bg-gray-50 border-none rounded-xl p-3.5 text-xs font-bold focus:ring-1 focus:ring-primary outline-none h-32"></textarea>
+            <textarea
+              value={productForm.description}
+              onChange={(event) => setProductForm((prev) => ({ ...prev, description: event.target.value }))}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs font-bold focus:ring-1 focus:ring-primary outline-none h-32"
+            ></textarea>
           </div>
 
           <div className="pt-6 flex space-x-3">

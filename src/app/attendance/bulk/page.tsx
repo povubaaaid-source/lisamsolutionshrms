@@ -29,7 +29,41 @@ type EmployeeRecord = {
   name: string;
   employee_detail?: {
     department?: { id?: number | string; team_name?: string };
+    shift_type_id?: number | string;
+    shift_type?: {
+      id?: number | string;
+      shift_name?: string;
+      code?: string;
+      start_time?: string;
+      end_time?: string;
+      late_grace_minutes?: number;
+      half_day_mark_time?: string;
+      min_hours?: number;
+    };
   };
+};
+
+type HolidayRecord = {
+  date: string;
+};
+
+type AttendanceSettingsRecord = {
+  office_open_days?: number[] | string;
+};
+
+const toDateString = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+const parseOfficeOpenDays = (value: unknown) => {
+  if (Array.isArray(value)) return value.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6);
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed) ? parsed.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [1, 2, 3, 4, 5];
+    } catch {
+      return [1, 2, 3, 4, 5];
+    }
+  }
+  return [1, 2, 3, 4, 5];
 };
 
 export default function BulkAttendancePage() {
@@ -37,14 +71,16 @@ export default function BulkAttendancePage() {
   const [loading, setLoading] = useState(true);
   const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
+  const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
+  const [officeOpenDays, setOfficeOpenDays] = useState<number[]>([1, 2, 3, 4, 5]);
   
   // Form State
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
-  const [clockIn, setClockIn] = useState("09:00 AM");
-  const [clockOut, setClockOut] = useState("06:00 PM");
+  const [clockIn, setClockIn] = useState("09:00");
+  const [clockOut, setClockOut] = useState("18:00");
   const [isLate, setIsLate] = useState(false);
   const [isHalfDay, setIsHalfDay] = useState(false);
   const [workingFrom, setWorkingFrom] = useState("Office");
@@ -53,13 +89,19 @@ export default function BulkAttendancePage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [teamsRes, empRes] = await Promise.all([
+        const [teamsRes, empRes, holidayRes, settingsRes] = await Promise.all([
           api.get("/team"),
-          api.get("/employee")
+          api.get("/employee"),
+          api.get("/holidays"),
+          api.get("/attendance-settings"),
         ]);
         
         setTeams(teamsRes.data.data || []);
         setEmployees(empRes.data.data || []);
+        setHolidays(holidayRes.data.data || []);
+        const settingsRecords = settingsRes.data.data;
+        const settings = (Array.isArray(settingsRecords) ? settingsRecords[0] : settingsRecords) as AttendanceSettingsRecord | undefined;
+        setOfficeOpenDays(parseOfficeOpenDays(settings?.office_open_days));
       } catch (err) {
         console.error("Fetch Data Error:", err);
         showToast("Failed to load attendance options", "error");
@@ -87,24 +129,52 @@ export default function BulkAttendancePage() {
           employeeIds.add(String(employee.id));
         }
       });
+      const selectedEmployeeIds = Array.from(employeeIds);
+      if (selectedEmployeeIds.length === 0) {
+        showToast("No employees matched the selected departments.", "error");
+        return;
+      }
+
       const daysInMonth = new Date(year, month, 0).getDate();
-      const date = `${year}-${String(month).padStart(2, "0")}-01`;
+      const today = new Date();
+      const holidayDates = new Set(holidays.map((holiday) => holiday.date));
+      const openDays = officeOpenDays.length > 0 ? officeOpenDays : [1, 2, 3, 4, 5];
+      const eligibleDates = Array.from({ length: daysInMonth }, (_, index) => new Date(year, month - 1, index + 1))
+        .filter((date) => {
+          const dateString = toDateString(date);
+          const day = date.getDay();
+          return date <= today && openDays.includes(day) && !holidayDates.has(dateString);
+        })
+        .map(toDateString);
+
+      if (eligibleDates.length === 0) {
+        showToast("No working dates are available for the selected month.", "error");
+        return;
+      }
+
       await Promise.all(
-        Array.from(employeeIds).map((employeeId) =>
-          api.post("/attendance", {
-            employee_id: employeeId,
-            date,
-            status: isLate ? "late" : isHalfDay ? "half-day" : "present",
-            clock_in: clockIn,
-            clock_out: clockOut,
-            working_from: workingFrom,
-            late: isLate,
-            half_day: isHalfDay,
-            days_in_month: daysInMonth,
-          }),
-        ),
+        selectedEmployeeIds.flatMap((employeeId) => {
+          const employee = employees.find((item) => String(item.id) === employeeId);
+          return eligibleDates.map((date) =>
+            api.post("/attendance", {
+              employee_id: employeeId,
+              user_id: employeeId,
+              date,
+              status: isLate ? "late" : isHalfDay ? "half-day" : "present",
+              clock_in: clockIn,
+              clock_out: clockOut,
+              working_from: workingFrom,
+              late: isLate,
+              half_day: isHalfDay,
+              shift_type_id: employee?.employee_detail?.shift_type_id || employee?.employee_detail?.shift_type?.id || null,
+              shift_type: employee?.employee_detail?.shift_type,
+              days_in_month: daysInMonth,
+              source: "bulk-attendance",
+            }),
+          );
+        }),
       );
-      showToast("Bulk attendance processed for selected members!", "success");
+      showToast(`Bulk attendance processed for ${selectedEmployeeIds.length} employee(s) across ${eligibleDates.length} working day(s).`, "success");
     } catch (err) {
       console.error("Bulk Attendance Error:", err);
       showToast("Failed to process bulk attendance.", "error");
@@ -231,7 +301,7 @@ export default function BulkAttendancePage() {
                     <div className="relative">
                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                        <input 
-                         type="text" 
+                         type="time" 
                          value={clockIn}
                          onChange={(e) => setClockIn(e.target.value)}
                          className="w-full bg-gray-50 border-none rounded-xl py-3 pl-10 text-xs font-black outline-none focus:ring-2 focus:ring-primary/20" 
@@ -244,7 +314,7 @@ export default function BulkAttendancePage() {
                     <div className="relative">
                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                        <input 
-                         type="text" 
+                         type="time" 
                          value={clockOut}
                          onChange={(e) => setClockOut(e.target.value)}
                          className="w-full bg-gray-50 border-none rounded-xl py-3 pl-10 text-xs font-black outline-none focus:ring-2 focus:ring-primary/20" 
@@ -316,7 +386,7 @@ export default function BulkAttendancePage() {
            <div>
               <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest mb-1">Processing Note</p>
               <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.1em] leading-relaxed">
-                 This action will mark attendance for all selected employees for the entire month specified, excluding holidays and weekends if configured in the system settings.
+                 This action will mark attendance for all selected employees for the selected month, excluding holidays and closed office days from attendance settings.
               </p>
            </div>
         </div>

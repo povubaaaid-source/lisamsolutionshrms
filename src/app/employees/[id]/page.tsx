@@ -1,35 +1,48 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ComponentType, ReactNode } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Activity,
+  AlertCircle,
+  Award,
+  Briefcase,
+  Calendar,
+  CheckCircle2,
+  ChevronLeft,
+  Clock,
+  Download,
+  Edit,
+  Eye,
+  FilePlus,
+  FileText,
+  Mail,
+  MapPin,
+  Phone,
+  RefreshCw,
+  Trash2,
+  User,
+  XCircle,
+} from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Briefcase, 
-  Calendar, 
-  Clock, 
-  FileText, 
-  Edit, 
-  Key, 
-  Award,
-  CheckCircle2,
-  XCircle,
-  Activity,
-  Download,
-  Trash2,
-  Eye,
-  FilePlus
-} from "lucide-react";
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import api from "@/lib/api";
-import { Employee } from "@/types";
 import { useToast } from "@/context/ToastContext";
-import { RefreshCw, AlertCircle, ChevronLeft } from "lucide-react";
+import {
+  attendanceStatus,
+  formatMinutes,
+  getAttendanceEmployeeId,
+  getEmployeeDisplayId,
+  getEmployeeId,
+  getLeaveDate,
+  getLeaveEmployeeId,
+  leaveUnits,
+  minutesBetween,
+  type HRRecord,
+} from "@/lib/hr-utils";
 
 const tabs = [
   { id: "activity", label: "Activity", icon: Activity },
@@ -41,43 +54,165 @@ const tabs = [
   { id: "documents", label: "Documents", icon: FileText },
 ];
 
+const formatDate = (value?: string) => {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return "Active";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+};
+
+const getProjectName = (project: HRRecord) => project.project_name || project.name || "Untitled Project";
+const getTaskTitle = (task: HRRecord) => task.heading || task.title || "Untitled Task";
+const getLeaveTypeId = (leave: HRRecord) => String(leave.leave_type_id || leave.leave_type?.id || leave.type?.id || "");
+const getLeaveTypeName = (leave: HRRecord) => leave.leave_type?.type_name || leave.type?.type_name || leave.type || "Leave";
+
+const hasMember = (record: HRRecord, employee: HRRecord) => {
+  const employeeId = String(employee.id);
+  const employeeName = String(employee.name || "");
+  const candidates = [...(record.members || []), ...(record.users || []), ...(record.assignees || [])];
+  return candidates.some((candidate) => String(candidate.id || candidate.user_id || candidate.user?.id || "") === employeeId || candidate.name === employeeName || candidate.user?.name === employeeName);
+};
+
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState("profile");
-  const [employee, setEmployee] = useState<Employee | null>(null);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [leaves, setLeaves] = useState<any[]>([]);
+  const [employee, setEmployee] = useState<HRRecord | null>(null);
+  const [projects, setProjects] = useState<HRRecord[]>([]);
+  const [tasks, setTasks] = useState<HRRecord[]>([]);
+  const [leaves, setLeaves] = useState<HRRecord[]>([]);
+  const [timeLogs, setTimeLogs] = useState<HRRecord[]>([]);
+  const [documents, setDocuments] = useState<HRRecord[]>([]);
+  const [activities, setActivities] = useState<HRRecord[]>([]);
+  const [attendanceRows, setAttendanceRows] = useState<HRRecord[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<HRRecord[]>([]);
+  const [leaveQuotas, setLeaveQuotas] = useState<HRRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchEmployee = async () => {
-      try {
-        const response = await api.get(`/employee/${params.id}?include=employeeDetail,projects,tasks,leaves`);
-        setEmployee(response.data.data);
-        setProjects(response.data.data.projects || []);
-        setTasks(response.data.data.tasks || []);
-        setLeaves(response.data.data.leaves || []);
-      } catch (err: any) {
-        console.error("Fetch Employee Error:", err);
-        setError(err.response?.data?.message || "Failed to load employee details.");
-        showToast("Error loading employee details.", "error");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchEmployee();
+  const fetchEmployee = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [
+        employeeResponse,
+        projectResponse,
+        taskResponse,
+        leaveResponse,
+        timeLogResponse,
+        docsResponse,
+        activityResponse,
+        attendanceResponse,
+        leaveTypeResponse,
+        quotaResponse,
+      ] = await Promise.all([
+        api.get(`/employee/${params.id}`),
+        api.get("/projects"),
+        api.get("/tasks"),
+        api.get("/leaves"),
+        api.get("/time-logs"),
+        api.get("/employee-docs"),
+        api.get("/user-activities"),
+        api.get("/attendance"),
+        api.get("/leave-type"),
+        api.get("/leave-quotas"),
+      ]);
+
+      const employeeData = employeeResponse.data.data as HRRecord;
+      const employeeId = String(employeeData.id || params.id);
+      const employeeName = String(employeeData.name || "");
+      const belongsToEmployee = (record: HRRecord) =>
+        getEmployeeId(record) === employeeId || record.user?.name === employeeName || record.employee?.name === employeeName;
+
+      const allProjects = (projectResponse.data.data || []) as HRRecord[];
+      const allTasks = (taskResponse.data.data || []) as HRRecord[];
+      const allLeaves = (leaveResponse.data.data || []) as HRRecord[];
+      const allTimeLogs = (timeLogResponse.data.data || []) as HRRecord[];
+      const allDocs = (docsResponse.data.data || []) as HRRecord[];
+      const allActivities = (activityResponse.data.data || []) as HRRecord[];
+      const allAttendance = (attendanceResponse.data.data || []) as HRRecord[];
+      const allLeaveTypes = (leaveTypeResponse.data.data || []) as HRRecord[];
+      const allQuotas = (quotaResponse.data.data || []) as HRRecord[];
+
+      setEmployee(employeeData);
+      setProjects((employeeData.projects || allProjects.filter((project) => hasMember(project, employeeData))) as HRRecord[]);
+      setTasks((employeeData.tasks || allTasks.filter((task) => hasMember(task, employeeData) || belongsToEmployee(task))) as HRRecord[]);
+      setLeaves((employeeData.leaves || allLeaves.filter((leave) => getLeaveEmployeeId(leave) === employeeId || leave.user?.name === employeeName || leave.employee?.name === employeeName)) as HRRecord[]);
+      setTimeLogs(allTimeLogs.filter((row) => belongsToEmployee(row)));
+      setDocuments(allDocs.filter((row) => belongsToEmployee(row)));
+      setActivities(allActivities.filter((row) => belongsToEmployee(row)).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))));
+      setAttendanceRows(allAttendance.filter((row) => getAttendanceEmployeeId(row) === employeeId || row.employee?.name === employeeName));
+      setLeaveTypes(allLeaveTypes);
+      setLeaveQuotas(allQuotas.filter((quota) => getLeaveEmployeeId(quota) === employeeId));
+    } catch (err: any) {
+      console.error("Fetch Employee Error:", err);
+      setError(err.response?.data?.message || "Failed to load employee details.");
+      showToast("Error loading employee details.", "error");
+    } finally {
+      setLoading(false);
+    }
   }, [params.id, showToast]);
+
+  useEffect(() => {
+    void fetchEmployee();
+  }, [fetchEmployee]);
+
+  const handleDeleteDocument = async (id: number | string) => {
+    try {
+      await api.delete(`/employee-docs/${id}`);
+      setDocuments((current) => current.filter((doc) => doc.id !== id));
+      showToast("Document deleted successfully.", "success");
+    } catch {
+      setDocuments((current) => current.filter((doc) => doc.id !== id));
+      showToast("Document removed locally until the PHP endpoint is ready.", "error");
+    }
+  };
+
+  const derived = useMemo(() => {
+    const completedTasks = tasks.filter((task) => ["completed", "done"].includes(String(task.status || "").toLowerCase()));
+    const loggedMinutes = timeLogs.reduce((total, row) => total + Number(row.total_minutes || minutesBetween(row.start_time, row.end_time)), 0);
+    const approvedLeaveUnits = leaves.filter((leave) => leave.status === "approved").reduce((total, leave) => total + leaveUnits(leave), 0);
+    const quotaTotal = leaveQuotas.length > 0
+      ? leaveQuotas.reduce((total, quota) => total + Number(quota.no_of_leaves || quota.leaves || 0), 0)
+      : leaveTypes.reduce((total, type) => total + Number(type.no_of_leaves || type.leave_number || type.leaves || 0), 0);
+    const presentEntries = attendanceRows.filter((row) => ["present", "late", "half-day"].includes(attendanceStatus(row, row.shift_type)));
+    const attendanceRate = attendanceRows.length > 0 ? Math.round((presentEntries.length / attendanceRows.length) * 100) : 0;
+
+    return {
+      completedTasks: completedTasks.length,
+      loggedMinutes,
+      approvedLeaveUnits,
+      quotaTotal,
+      remainingLeaves: Math.max(0, quotaTotal - approvedLeaveUnits),
+      activeProjects: projects.filter((project) => !["finished", "completed", "archived"].includes(String(project.status || "").toLowerCase())).length,
+      attendanceRate,
+    };
+  }, [attendanceRows, leaveQuotas, leaveTypes, leaves, projects, tasks, timeLogs]);
+
+  const leaveBalanceRows = useMemo(() => {
+    return leaveTypes.map((type) => {
+      const typeId = String(type.id);
+      const quota = leaveQuotas.find((item) => String(item.leave_type_id || item.type_id) === typeId);
+      const total = Number(quota?.no_of_leaves || type.no_of_leaves || type.leave_number || type.leaves || 0);
+      const typeLeaves = leaves.filter((leave) => getLeaveTypeId(leave) === typeId);
+      const approved = typeLeaves.filter((leave) => leave.status === "approved").reduce((sum, leave) => sum + leaveUnits(leave), 0);
+      const pending = typeLeaves.filter((leave) => leave.status === "pending").reduce((sum, leave) => sum + leaveUnits(leave), 0);
+      return { id: typeId, name: type.type_name || type.name || "Leave", total, approved, pending, remaining: Math.max(0, total - approved) };
+    }).filter((row) => row.total > 0 || row.approved > 0 || row.pending > 0);
+  }, [leaveQuotas, leaveTypes, leaves]);
 
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex flex-col items-center justify-center min-h-[400px]">
-          <RefreshCw className="h-10 w-10 text-primary animate-spin mb-4" />
-          <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Loading profile details...</p>
+        <div className="flex min-h-[400px] flex-col items-center justify-center">
+          <RefreshCw className="mb-4 h-10 w-10 animate-spin text-primary" />
+          <p className="text-xs font-black uppercase tracking-widest text-gray-400">Loading profile details...</p>
         </div>
       </DashboardLayout>
     );
@@ -86,11 +221,11 @@ export default function EmployeeDetailPage() {
   if (error || !employee) {
     return (
       <DashboardLayout>
-        <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-          <AlertCircle className="h-12 w-12 text-red-500 mb-4 opacity-20" />
-          <h2 className="text-lg font-black text-gray-800 uppercase tracking-widest mb-2">Oops! Profile not found</h2>
-          <p className="text-sm text-gray-500 mb-6 max-w-md">{error || "Employee not found."}</p>
-          <Button onClick={() => router.push("/employees")} className="bg-primary text-white text-[10px] font-black px-8 h-10 uppercase tracking-widest shadow-lg shadow-primary/20">
+        <div className="flex min-h-[400px] flex-col items-center justify-center text-center">
+          <AlertCircle className="mb-4 h-12 w-12 text-red-500 opacity-20" />
+          <h2 className="mb-2 text-lg font-black uppercase tracking-widest text-gray-800">Profile Not Found</h2>
+          <p className="mb-6 max-w-md text-sm text-gray-500">{error || "Employee not found."}</p>
+          <Button onClick={() => router.push("/employees")} className="h-10 bg-primary px-8 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20">
             Go Back to Employees
           </Button>
         </div>
@@ -98,397 +233,310 @@ export default function EmployeeDetailPage() {
     );
   }
 
-  const initial = employee.name.charAt(0);
-  const detail = employee.employee_detail;
-  const designationName = detail?.designation?.name || "N/A";
-  const departmentName = detail?.department?.team_name || "N/A";
+  const detail = employee.employee_detail || {};
+  const initial = String(employee.name || "?").charAt(0);
+  const designationName = detail.designation?.name || "N/A";
+  const departmentName = detail.department?.team_name || detail.department?.name || "N/A";
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Profile Header */}
-        <div className="bg-white px-6 py-8 rounded-2xl shadow-sm border border-gray-50 flex flex-wrap items-center justify-between gap-6 -mx-6 -mt-6 mb-6">
-           <div className="flex items-center space-x-6">
-              <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center text-primary text-3xl font-black shadow-inner border border-primary/5 uppercase">
-                 {initial}
+        <div className="-mx-6 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-6 rounded-2xl border border-gray-50 bg-white px-6 py-8 shadow-sm">
+          <div className="flex items-center space-x-6">
+            <div className="flex h-24 w-24 items-center justify-center rounded-2xl border border-primary/5 bg-gradient-to-br from-primary/10 to-primary/30 text-3xl font-black uppercase text-primary shadow-inner">
+              {initial}
+            </div>
+            <div>
+              <h1 className="text-2xl font-black uppercase tracking-widest text-gray-800">{employee.name}</h1>
+              <p className="mt-1 text-[11px] font-black uppercase tracking-[0.2em] text-primary">{designationName} / {departmentName}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-4">
+                <span className="flex items-center text-[10px] font-bold text-gray-400"><Mail className="mr-1.5 h-3 w-3" /> {employee.email}</span>
+                {(employee.mobile || detail.mobile) && <span className="flex items-center text-[10px] font-bold text-gray-400"><Phone className="mr-1.5 h-3 w-3" /> {employee.mobile || detail.mobile}</span>}
               </div>
-              <div>
-                 <h1 className="text-2xl font-black text-gray-800 uppercase tracking-widest">{employee.name}</h1>
-                 <p className="text-[11px] text-primary font-black uppercase tracking-[0.2em] mt-1">{designationName} • {departmentName}</p>
-                 <div className="flex items-center space-x-4 mt-3">
-                    <span className="flex items-center text-[10px] text-gray-400 font-bold"><Mail className="h-3 w-3 mr-1.5" /> {employee.email}</span>
-                    {employee.employee_detail?.mobile && (
-                      <span className="flex items-center text-[10px] text-gray-400 font-bold"><Phone className="h-3 w-3 mr-1.5" /> {employee.employee_detail.mobile}</span>
-                    )}
-                 </div>
-              </div>
-           </div>
-           <div className="flex items-center space-x-3">
-              <span className="bg-green-100 text-green-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">Active</span>
-              <Link href={`/employees/${employee.id}/edit`}>
-                <Button className="bg-white text-gray-400 border border-gray-100 p-2.5 rounded-xl hover:text-primary transition-colors shadow-sm">
-                   <Edit className="h-5 w-5" />
-                </Button>
-              </Link>
-              <Button onClick={() => router.push("/employees")} className="bg-gray-50 text-gray-400 border border-gray-100 p-2.5 rounded-xl hover:text-gray-600 transition-colors shadow-sm">
-                 <ChevronLeft className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className={`rounded-full px-4 py-1.5 text-[10px] font-black uppercase tracking-widest ${employee.status === "deactive" ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"}`}>
+              {employee.status || "active"}
+            </span>
+            <Link href={`/employees/${employee.id}/edit`}>
+              <Button className="rounded-xl border border-gray-100 bg-white p-2.5 text-gray-400 shadow-sm transition-colors hover:text-primary">
+                <Edit className="h-5 w-5" />
               </Button>
-           </div>
-        </div>
-        
-        {/* Stats Cards (Laravel Parity) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <Card className="p-6 border-none shadow-sm bg-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Tasks Done</p>
-                <h3 className="text-2xl font-black text-gray-800">{employee.tasks_count || 0}</h3>
-              </div>
-              <div className="h-12 w-12 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-6 border-none shadow-sm bg-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Hours Logged</p>
-                <h3 className="text-2xl font-black text-gray-800">{employee.hours_logged || 0} hrs</h3>
-              </div>
-              <div className="h-12 w-12 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
-                <Clock className="h-6 w-6" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-6 border-none shadow-sm bg-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Leaves Taken</p>
-                <h3 className="text-2xl font-black text-gray-800">{employee.leaves_count || 0}</h3>
-              </div>
-              <div className="h-12 w-12 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center">
-                <FileText className="h-6 w-6" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-6 border-none shadow-sm bg-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Remaining Leaves</p>
-                <h3 className="text-2xl font-black text-gray-800">{(employee.allowed_leaves || 0) - (employee.leaves_count || 0)}</h3>
-              </div>
-              <div className="h-12 w-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center">
-                <XCircle className="h-6 w-6" />
-              </div>
-            </div>
-          </Card>
+            </Link>
+            <Button onClick={() => router.push("/employees")} className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-gray-400 shadow-sm transition-colors hover:text-gray-600">
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
-        {/* Tabs Navigation */}
-        <div className="flex items-center space-x-1 bg-white p-1.5 rounded-2xl shadow-sm border border-gray-50 overflow-x-auto scrollbar-hide">
-           {tabs.map((tab) => (
-              <button
-                 key={tab.id}
-                 onClick={() => setActiveTab(tab.id)}
-                 className={`flex items-center space-x-2 px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                    activeTab === tab.id 
-                    ? "bg-primary text-white shadow-lg shadow-primary/20" 
-                    : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
-                 }`}
-              >
-                 <tab.icon className="h-4 w-4" />
-                 <span>{tab.label}</span>
-              </button>
-           ))}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "Tasks Done", value: derived.completedTasks, icon: CheckCircle2, color: "text-green-500", bg: "bg-green-50" },
+            { label: "Hours Logged", value: formatMinutes(derived.loggedMinutes), icon: Clock, color: "text-blue-500", bg: "bg-blue-50" },
+            { label: "Leaves Taken", value: derived.approvedLeaveUnits, icon: FileText, color: "text-orange-500", bg: "bg-orange-50" },
+            { label: "Remaining Leaves", value: derived.remainingLeaves, icon: XCircle, color: "text-red-500", bg: "bg-red-50" },
+          ].map((stat) => (
+            <Card key={stat.label} className="border-none bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">{stat.label}</p>
+                  <h3 className="text-2xl font-black text-gray-800">{stat.value}</h3>
+                </div>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${stat.bg} ${stat.color}`}>
+                  <stat.icon className="h-6 w-6" />
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
 
-        {/* Tab Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-           <div className="lg:col-span-2 space-y-6">
-              {activeTab === "activity" && (
-                 <Card title="Recent Activity" className="border-none shadow-sm bg-white p-8">
-                    <div className="space-y-8 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-gray-100">
-                       {[
-                          { title: "Task Completed", desc: "Completed the 'Dashboard UI' task.", time: "2 hours ago", color: "bg-green-500" },
-                          { title: "Attendance Marked", desc: "Marked attendance for today.", time: "4 hours ago", color: "bg-blue-500" },
-                          { title: "Leave Requested", desc: "Applied for a casual leave for next Friday.", time: "1 day ago", color: "bg-orange-500" }
-                       ].map((item, idx) => (
-                          <div key={idx} className="relative pl-10">
-                             <div className={`absolute left-0 top-1.5 h-[23px] w-[23px] rounded-full border-4 border-white shadow-sm ${item.color}`} />
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1">{item.time}</p>
-                             <h4 className="text-sm font-bold text-gray-700">{item.title}</h4>
-                             <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
-                          </div>
-                       ))}
-                    </div>
-                 </Card>
-              )}
+        <div className="flex items-center space-x-1 overflow-x-auto rounded-2xl border border-gray-50 bg-white p-1.5 shadow-sm">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center space-x-2 whitespace-nowrap rounded-xl px-8 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${
+                activeTab === tab.id ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
 
-              {activeTab === "profile" && (
-                 <Card title="Personal Information" className="border-none shadow-sm bg-white p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                       <div className="space-y-6">
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Full Name</p>
-                             <p className="text-sm font-bold text-gray-700">{employee.name}</p>
-                          </div>
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Employee ID</p>
-                             <p className="text-sm font-bold text-gray-700">{detail?.employee_id || "N/A"}</p>
-                          </div>
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Joining Date</p>
-                             <p className="text-sm font-bold text-gray-700">{detail?.joining_date || "N/A"}</p>
-                          </div>
-                       </div>
-                       <div className="space-y-6">
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Department</p>
-                             <p className="text-sm font-bold text-gray-700">{departmentName}</p>
-                          </div>
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Designation</p>
-                             <p className="text-sm font-bold text-gray-700">{designationName}</p>
-                          </div>
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Gender</p>
-                             <p className="text-sm font-bold text-gray-700 capitalize">{employee.gender || "Not specified"}</p>
-                          </div>
-                       </div>
-                       <div className="space-y-6">
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Mobile</p>
-                             <p className="text-sm font-bold text-gray-700">{employee.mobile || "N/A"}</p>
-                          </div>
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Slack Username</p>
-                             <p className="text-sm font-bold text-primary">@{detail?.slack_username || "n/a"}</p>
-                          </div>
-                          <div>
-                             <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-1.5">Hourly Rate</p>
-                             <p className="text-sm font-bold text-gray-700">${detail?.hourly_rate || "0.00"}</p>
-                          </div>
-                       </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            {activeTab === "activity" && (
+              <Card title="Recent Activity" className="border-none bg-white p-8 shadow-sm">
+                <div className="relative space-y-8 before:absolute before:bottom-2 before:left-[11px] before:top-2 before:w-px before:bg-gray-100">
+                  {activities.map((item) => (
+                    <div key={item.id} className="relative pl-10">
+                      <div className="absolute left-0 top-1.5 h-[23px] w-[23px] rounded-full border-4 border-white bg-primary shadow-sm" />
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-gray-300">{formatDateTime(item.created_at)}</p>
+                      <p className="text-sm font-bold text-gray-700">{item.activity || item.description || "Activity recorded"}</p>
                     </div>
-                    <div className="mt-8 pt-8 border-t border-gray-50">
-                       <p className="text-[10px] text-gray-300 font-black uppercase tracking-widest mb-3 flex items-center">
-                          <MapPin className="h-3 w-3 mr-2" /> Current Address
-                       </p>
-                       <p className="text-sm font-bold text-gray-700 leading-relaxed">{detail?.address || "No address provided."}</p>
-                    </div>
-                 </Card>
-              )}
-
-              {activeTab === "documents" && (
-                 <Card className="border-none shadow-sm bg-white p-0 overflow-hidden">
-                    <div className="flex items-center justify-between p-6 border-b border-gray-50">
-                       <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">Employee Documents</h3>
-                       <Button className="bg-primary/10 text-primary text-[10px] font-black px-4 py-2 uppercase tracking-widest hover:bg-primary hover:text-white transition-all">
-                          <FilePlus className="h-4 w-4 mr-2" /> Add Document
-                       </Button>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                       {[
-                          { name: "ID Proof.pdf", size: "1.2 MB", date: "2024-01-15" },
-                          { name: "Joining Letter.pdf", size: "850 KB", date: "2024-01-20" }
-                       ].map((doc, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-6 hover:bg-gray-50 transition-colors">
-                             <div className="flex items-center space-x-4">
-                                <div className="h-10 w-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400">
-                                   <FileText className="h-5 w-5" />
-                                </div>
-                                <div>
-                                   <p className="text-sm font-bold text-gray-700">{doc.name}</p>
-                                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{doc.size} • {doc.date}</p>
-                                </div>
-                             </div>
-                             <div className="flex items-center space-x-2">
-                                <button className="p-2 text-gray-300 hover:text-primary transition-colors" title="View"><Eye className="h-4 w-4" /></button>
-                                <button className="p-2 text-gray-300 hover:text-primary transition-colors" title="Download"><Download className="h-4 w-4" /></button>
-                                <button className="p-2 text-gray-300 hover:text-red-500 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
-                             </div>
-                          </div>
-                       ))}
-                    </div>
-                 </Card>
-              )}
-
-              {activeTab === "projects" && (
-                 <Card title="Projects Worked" className="border-none shadow-sm bg-white p-0 overflow-hidden">
-                    <div className="overflow-x-auto">
-                       <table className="w-full">
-                          <thead>
-                             <tr className="bg-gray-50/50">
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Project Name</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Progress</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Deadline</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-50">
-                             {projects.length > 0 ? projects.map((project, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                                   <td className="px-6 py-4">
-                                      <span className="text-sm font-bold text-gray-700">{project.project_name}</span>
-                                   </td>
-                                   <td className="px-6 py-4 min-w-[150px]">
-                                      <div className="flex items-center space-x-3">
-                                         <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                            <div 
-                                              className="h-full bg-primary rounded-full transition-all duration-1000" 
-                                              style={{ width: `${project.completion_percent || 0}%` }}
-                                            />
-                                         </div>
-                                         <span className="text-[10px] font-black text-gray-400">{project.completion_percent || 0}%</span>
-                                      </div>
-                                   </td>
-                                   <td className="px-6 py-4 text-xs font-bold text-gray-500">
-                                      {project.deadline ? new Date(project.deadline).toLocaleDateString() : 'No Deadline'}
-                                   </td>
-                                   <td className="px-6 py-4">
-                                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                                         project.status === 'finished' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
-                                      }`}>
-                                         {project.status}
-                                      </span>
-                                   </td>
-                                </tr>
-                             )) : (
-                                <tr><td colSpan={4} className="py-20 text-center text-[10px] font-black text-gray-300 uppercase tracking-widest">No projects assigned</td></tr>
-                             )}
-                          </tbody>
-                       </table>
-                    </div>
-                 </Card>
-              )}
-
-              {activeTab === "tasks" && (
-                 <Card title="Task History" className="border-none shadow-sm bg-white p-0 overflow-hidden">
-                    <div className="overflow-x-auto">
-                       <table className="w-full">
-                          <thead>
-                             <tr className="bg-gray-50/50">
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Task</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Due Date</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-50">
-                             {tasks.length > 0 ? tasks.map((task, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                                   <td className="px-6 py-4">
-                                      <span className="text-sm font-bold text-gray-700">{task.heading}</span>
-                                      <div className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">{task.project?.project_name || 'Personal'}</div>
-                                   </td>
-                                   <td className="px-6 py-4 text-xs font-bold text-gray-500">
-                                      {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
-                                   </td>
-                                   <td className="px-6 py-4">
-                                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                                         task.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'
-                                      }`}>
-                                         {task.status}
-                                      </span>
-                                   </td>
-                                </tr>
-                             )) : (
-                                <tr><td colSpan={3} className="py-20 text-center text-[10px] font-black text-gray-300 uppercase tracking-widest">No tasks found</td></tr>
-                             )}
-                          </tbody>
-                       </table>
-                    </div>
-                 </Card>
-              )}
-
-              {activeTab === "leaves" && (
-                 <Card title="Leave Records" className="border-none shadow-sm bg-white p-0 overflow-hidden">
-                    <div className="overflow-x-auto">
-                       <table className="w-full">
-                          <thead>
-                             <tr className="bg-gray-50/50">
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Leave Type</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Reason</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-50">
-                             {leaves.length > 0 ? leaves.map((leave, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                                   <td className="px-6 py-4 text-xs font-bold text-gray-700">
-                                      {new Date(leave.leave_date).toLocaleDateString()}
-                                   </td>
-                                   <td className="px-6 py-4">
-                                      <span className="text-[10px] font-black text-primary uppercase tracking-widest">{leave.type?.type_name || 'Casual'}</span>
-                                   </td>
-                                   <td className="px-6 py-4 text-xs text-gray-500 italic max-w-[200px] truncate">
-                                      {leave.reason || 'No reason provided'}
-                                   </td>
-                                   <td className="px-6 py-4">
-                                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                                         leave.status === 'approved' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'
-                                      }`}>
-                                         {leave.status}
-                                      </span>
-                                   </td>
-                                </tr>
-                             )) : (
-                                <tr><td colSpan={4} className="py-20 text-center text-[10px] font-black text-gray-300 uppercase tracking-widest">No leave records</td></tr>
-                             )}
-                          </tbody>
-                       </table>
-                    </div>
-                 </Card>
-              )}
-
-              {activeTab !== "profile" && activeTab !== "activity" && activeTab !== "documents" && 
-               activeTab !== "projects" && activeTab !== "tasks" && activeTab !== "leaves" && (
-                 <Card className="border-none shadow-sm bg-white py-24 text-center">
-                    <div className="h-16 w-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-200">
-                       <Award className="h-8 w-8" />
-                    </div>
-                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest">No detailed records found in {activeTab}</p>
-                 </Card>
-              )}
-           </div>
-
-           <div className="space-y-6">
-              <Card title="Skills & Expertise" className="border-none shadow-sm bg-white p-6">
-                 <div className="flex flex-wrap gap-2 mt-2">
-                    <span className="px-3 py-1.5 bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-widest rounded-lg border border-gray-100">
-                        Generalist
-                    </span>
-                 </div>
+                  ))}
+                  {activities.length === 0 && <EmptyState label="No activity recorded" />}
+                </div>
               </Card>
+            )}
 
-              <Card title="Work Summary" className="border-none shadow-sm bg-white p-6">
-                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                       <div className="flex items-center space-x-3 text-gray-400">
-                          <Briefcase className="h-4 w-4" />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Active Projects</span>
-                       </div>
-                       <span className="text-sm font-black text-gray-800">0</span>
+            {activeTab === "profile" && (
+              <Card title="Personal Information" className="border-none bg-white p-8 shadow-sm">
+                <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+                  {[
+                    ["Full Name", employee.name],
+                    ["Employee ID", getEmployeeDisplayId(employee)],
+                    ["Joining Date", formatDate(detail.joining_date)],
+                    ["Department", departmentName],
+                    ["Designation", designationName],
+                    ["Gender", employee.gender || "Not specified"],
+                    ["Mobile", employee.mobile || detail.mobile || "N/A"],
+                    ["Slack Username", detail.slack_username ? `@${detail.slack_username}` : "N/A"],
+                    ["Hourly Rate", detail.hourly_rate ? `$${detail.hourly_rate}` : "N/A"],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-gray-300">{label}</p>
+                      <p className="text-sm font-bold text-gray-700">{value}</p>
                     </div>
-                    <div className="flex items-center justify-between">
-                       <div className="flex items-center space-x-3 text-gray-400">
-                          <Clock className="h-4 w-4" />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Attendance</span>
-                       </div>
-                       <span className="text-sm font-black text-gray-800">100%</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                       <div className="flex items-center space-x-3 text-gray-400">
-                          <CheckCircle2 className="h-4 w-4" />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Tasks Done</span>
-                       </div>
-                       <span className="text-sm font-black text-gray-800">0</span>
-                    </div>
-                 </div>
+                  ))}
+                </div>
+                <div className="mt-8 border-t border-gray-50 pt-8">
+                  <p className="mb-3 flex items-center text-[10px] font-black uppercase tracking-widest text-gray-300"><MapPin className="mr-2 h-3 w-3" /> Current Address</p>
+                  <p className="text-sm font-bold leading-relaxed text-gray-700">{detail.address || "No address provided."}</p>
+                </div>
               </Card>
-           </div>
+            )}
+
+            {activeTab === "projects" && (
+              <DataCard title="Projects Worked" emptyLabel="No projects assigned" columns={["Project", "Deadline", "Progress", "Status"]}>
+                {projects.map((project) => (
+                  <tr key={project.id}>
+                    <td className="px-6 py-4 text-sm font-bold text-gray-700">{getProjectName(project)}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-500">{formatDate(project.deadline)}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${Number(project.completion_percent || 0)}%` }} />
+                        </div>
+                        <span className="text-[10px] font-black text-gray-400">{project.completion_percent || 0}%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4"><StatusBadge status={project.status || "active"} /></td>
+                  </tr>
+                ))}
+              </DataCard>
+            )}
+
+            {activeTab === "tasks" && (
+              <DataCard title="Task History" emptyLabel="No tasks found" columns={["Task", "Project", "Due Date", "Status"]}>
+                {tasks.map((task) => (
+                  <tr key={task.id}>
+                    <td className="px-6 py-4 text-sm font-bold text-gray-700">{getTaskTitle(task)}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-500">{task.project?.project_name || task.project_name || "Personal"}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-500">{formatDate(task.due_date)}</td>
+                    <td className="px-6 py-4"><StatusBadge status={task.status || "open"} /></td>
+                  </tr>
+                ))}
+              </DataCard>
+            )}
+
+            {activeTab === "leaves" && (
+              <div className="space-y-6">
+                <DataCard title="Leave Balances" emptyLabel="No leave balances found" columns={["Leave Type", "Allowed", "Taken", "Pending", "Remaining"]}>
+                  {leaveBalanceRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-6 py-4 text-sm font-bold text-gray-700">{row.name}</td>
+                      <td className="px-6 py-4 text-center text-xs font-black text-gray-600">{row.total}</td>
+                      <td className="px-6 py-4 text-center text-xs font-black text-red-500">{row.approved}</td>
+                      <td className="px-6 py-4 text-center text-xs font-black text-orange-500">{row.pending}</td>
+                      <td className="px-6 py-4 text-center text-xs font-black text-green-600">{row.remaining}</td>
+                    </tr>
+                  ))}
+                </DataCard>
+                <DataCard title="Leave Records" emptyLabel="No leave records" columns={["Date", "Type", "Reason", "Status"]}>
+                  {leaves.map((leave) => (
+                    <tr key={leave.id}>
+                      <td className="px-6 py-4 text-xs font-bold text-gray-700">{formatDate(getLeaveDate(leave))}</td>
+                      <td className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-primary">{getLeaveTypeName(leave)}</td>
+                      <td className="max-w-[240px] truncate px-6 py-4 text-xs text-gray-500">{leave.reason || "No reason provided"}</td>
+                      <td className="px-6 py-4"><StatusBadge status={leave.status || "pending"} /></td>
+                    </tr>
+                  ))}
+                </DataCard>
+              </div>
+            )}
+
+            {activeTab === "time-logs" && (
+              <DataCard title="Time Logs" emptyLabel="No time logs found" columns={["Project", "Start", "End", "Total", "Memo"]}>
+                {timeLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td className="px-6 py-4 text-sm font-bold text-gray-700">{log.project?.project_name || log.project_name || "Project"}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-500">{formatDateTime(log.start_time)}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-500">{formatDateTime(log.end_time)}</td>
+                    <td className="px-6 py-4 text-xs font-black text-gray-700">{formatMinutes(Number(log.total_minutes || minutesBetween(log.start_time, log.end_time)))}</td>
+                    <td className="max-w-[220px] truncate px-6 py-4 text-xs text-gray-500">{log.memo || "-"}</td>
+                  </tr>
+                ))}
+              </DataCard>
+            )}
+
+            {activeTab === "documents" && (
+              <Card className="overflow-hidden border-none bg-white p-0 shadow-sm">
+                <div className="flex items-center justify-between border-b border-gray-50 p-6">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-gray-800">Employee Documents</h3>
+                  <Button className="bg-primary/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-primary transition-all hover:bg-primary hover:text-white">
+                    <FilePlus className="mr-2 h-4 w-4" /> Add Document
+                  </Button>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {documents.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between p-6 transition-colors hover:bg-gray-50">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-400">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-gray-700">{doc.name}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{doc.size || "File"} / {formatDate(doc.created_at)}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <a href={doc.file_url || "#"} className="p-2 text-gray-300 transition-colors hover:text-primary" title="View"><Eye className="h-4 w-4" /></a>
+                        <a href={doc.file_url || "#"} className="p-2 text-gray-300 transition-colors hover:text-primary" title="Download"><Download className="h-4 w-4" /></a>
+                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-2 text-gray-300 transition-colors hover:text-red-500" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </div>
+                  ))}
+                  {documents.length === 0 && <EmptyState label="No documents uploaded" />}
+                </div>
+              </Card>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <Card title="Skills & Expertise" className="border-none bg-white p-6 shadow-sm">
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(employee.skills || detail.skills || ["Generalist"]).map((skill: string) => (
+                  <span key={skill} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </Card>
+
+            <Card title="Work Summary" className="border-none bg-white p-6 shadow-sm">
+              <div className="space-y-6">
+                <SummaryRow icon={Briefcase} label="Active Projects" value={derived.activeProjects} />
+                <SummaryRow icon={Clock} label="Attendance" value={`${derived.attendanceRate}%`} />
+                <SummaryRow icon={CheckCircle2} label="Tasks Done" value={derived.completedTasks} />
+                <SummaryRow icon={FileText} label="Leave Quota" value={derived.quotaTotal} />
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const normalized = status.toLowerCase();
+  const className =
+    normalized === "approved" || normalized === "completed" || normalized === "active" || normalized === "finished"
+      ? "bg-green-100 text-green-600"
+      : normalized === "rejected" || normalized === "deactive" || normalized === "absent"
+        ? "bg-red-100 text-red-600"
+        : "bg-orange-100 text-orange-600";
+
+  return <span className={`rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest ${className}`}>{status}</span>;
+}
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="py-16 text-center">
+      <Award className="mx-auto mb-3 h-10 w-10 text-gray-200" />
+      <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">{label}</p>
+    </div>
+  );
+}
+
+function DataCard({ title, columns, emptyLabel, children }: { title: string; columns: string[]; emptyLabel: string; children: ReactNode }) {
+  const rows = Array.isArray(children) ? children.filter(Boolean) : children ? [children] : [];
+  return (
+    <Card title={title} className="overflow-hidden border-none bg-white p-0 shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-50/50">
+              {columns.map((column) => (
+                <th key={column} className="px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {rows.length > 0 ? children : (
+              <tr>
+                <td colSpan={columns.length}><EmptyState label={emptyLabel} /></td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function SummaryRow({ icon: Icon, label, value }: { icon: ComponentType<{ className?: string }>; label: string; value: string | number }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center space-x-3 text-gray-400">
+        <Icon className="h-4 w-4" />
+        <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+      </div>
+      <span className="text-sm font-black text-gray-800">{value}</span>
+    </div>
   );
 }

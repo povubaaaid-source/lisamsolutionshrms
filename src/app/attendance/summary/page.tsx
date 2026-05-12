@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
+import { getHolidayDate, getLeaveDate, getLeaveEmployeeId, parseOfficeOpenDays } from "@/lib/hr-utils";
 
 type ShiftSummary = {
   id?: number | string;
@@ -21,6 +23,8 @@ type ShiftSummary = {
 type EmployeeOption = {
   id: number | string;
   name: string;
+  email?: string;
+  role?: string;
   employee_detail?: {
     shift_type?: ShiftSummary;
   };
@@ -34,12 +38,19 @@ type AttendanceRecord = {
   date: string;
   status: string;
   clock_in?: string;
+  clock_out?: string;
   late?: boolean;
   half_day?: boolean;
   shift_type?: ShiftSummary;
 };
 
-const thisYear = new Date("2026-05-08").getFullYear();
+type HolidayRecord = { date?: string; holiday_date?: string; name?: string; occassion?: string };
+type LeaveRecord = { user_id?: number | string; employee_id?: number | string; user?: { id?: number | string; name?: string }; employee?: { id?: number | string; name?: string }; leave_date?: string; date?: string; status?: string; reason?: string; leave_type?: { type_name?: string } };
+type DayDetail = { employee: EmployeeOption; day: number; date: string; status: string; attendance?: AttendanceRecord; holiday?: HolidayRecord; leave?: LeaveRecord };
+
+const now = new Date();
+const thisYear = now.getFullYear();
+const thisMonth = now.getMonth() + 1;
 
 const timeToMinutes = (value?: string) => {
   if (!value) return null;
@@ -73,22 +84,51 @@ const calculateStatus = (row: AttendanceRecord, shift?: ShiftSummary) => {
 
 export default function AttendanceSummaryPage() {
   const { showToast } = useToast();
+  const { user, hasPermission } = useAuth();
+  const canManageAttendance =
+    user?.role === "admin" ||
+    hasPermission("attendance.manage") ||
+    hasPermission("attendance.edit") ||
+    hasPermission("attendance.approve") ||
+    hasPermission("attendance.export");
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
+  const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
+  const [officeOpenDays, setOfficeOpenDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [selectedDayDetail, setSelectedDayDetail] = useState<DayDetail | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState("all");
-  const [month, setMonth] = useState(5);
+  const [month, setMonth] = useState(thisMonth);
   const [year, setYear] = useState(thisYear);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [employeeResponse, attendanceResponse] = await Promise.all([
+      const [employeeResponse, attendanceResponse, holidayResponse, leaveResponse, settingsResponse] = await Promise.all([
         api.get("/employee"),
         api.get("/attendance"),
+        api.get("/holidays"),
+        api.get("/leaves"),
+        api.get("/attendance-settings"),
       ]);
-      setEmployees(employeeResponse.data.data || []);
-      setAttendance(attendanceResponse.data.data || []);
+      const employeeList = (employeeResponse.data.data || []) as EmployeeOption[];
+      const attendanceList = (attendanceResponse.data.data || []) as AttendanceRecord[];
+      const holidayList = (holidayResponse.data.data || []) as HolidayRecord[];
+      const leaveList = (leaveResponse.data.data || []) as LeaveRecord[];
+      const settingsRecords = settingsResponse.data.data;
+      const attendanceSettings = Array.isArray(settingsRecords) ? settingsRecords[0] : settingsRecords;
+      const selfEmployee = employeeList.find((employee) =>
+        String(employee.id) === String(user?.id) ||
+        employee.email === user?.email ||
+        employee.name === user?.name
+      );
+      const selfId = String(selfEmployee?.id || user?.id || "");
+      setEmployees(canManageAttendance ? employeeList : employeeList.filter((employee) => String(employee.id) === selfId));
+      setAttendance(canManageAttendance ? attendanceList : attendanceList.filter((row) => String(row.employee_id || row.user_id || row.employee?.id || "") === selfId || row.employee?.name === user?.name));
+      setHolidays(holidayList);
+      setLeaves(canManageAttendance ? leaveList : leaveList.filter((leave) => getLeaveEmployeeId(leave) === selfId || leave.user?.name === user?.name || leave.employee?.name === user?.name));
+      setOfficeOpenDays(parseOfficeOpenDays(attendanceSettings?.office_open_days));
     } catch (err) {
       console.error("Fetch Attendance Summary Error:", err);
       showToast("Failed to load attendance summary", "error");
@@ -102,6 +142,12 @@ export default function AttendanceSummaryPage() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const resetFilters = () => {
+    setSelectedEmployee("all");
+    setMonth(thisMonth);
+    setYear(thisYear);
+  };
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -122,14 +168,27 @@ export default function AttendanceSummaryPage() {
   }, [attendance, month, year]);
 
   const getDayStatus = (employeeId: number | string, day: number) => {
+    const date = new Date(year, month - 1, day);
+    const dateString = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const record = attendanceByEmployeeDay.get(`${employeeId}-${day}`);
     if (record) {
       const shift = record.shift_type || employees.find((employee) => String(employee.id) === String(employeeId))?.employee_detail?.shift_type;
       return calculateStatus(record, shift);
     }
-    const date = new Date(year, month - 1, day);
-    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-    return isWeekend ? "holiday" : "empty";
+    if (holidays.some((holiday) => getHolidayDate(holiday) === dateString)) return "holiday";
+    if (leaves.some((leave) => getLeaveEmployeeId(leave) === String(employeeId) && getLeaveDate(leave) === dateString && leave.status === "approved")) return "leave";
+    if (!officeOpenDays.includes(date.getDay())) return "closed";
+    const todayDate = new Date();
+    todayDate.setHours(23, 59, 59, 999);
+    return date <= todayDate ? "absent" : "empty";
+  };
+
+  const getDayDetail = (employee: EmployeeOption, day: number): DayDetail => {
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const attendanceRecord = attendanceByEmployeeDay.get(`${employee.id}-${day}`);
+    const holiday = holidays.find((item) => getHolidayDate(item) === date);
+    const leave = leaves.find((item) => getLeaveEmployeeId(item) === String(employee.id) && getLeaveDate(item) === date && item.status === "approved");
+    return { employee, day, date, status: getDayStatus(employee.id, day), attendance: attendanceRecord, holiday, leave };
   };
 
   const getTotal = (employeeId: number | string) =>
@@ -152,7 +211,7 @@ export default function AttendanceSummaryPage() {
           <div className="col-sm-9 text-right flex justify-end items-center space-x-2">
             <Link href="/attendance/create">
               <Button className="btn-success btn-sm">
-                Mark Attendance <Plus className="h-4 w-4 ml-1 inline-block" />
+                {canManageAttendance ? "Mark Attendance" : "Clock In"} <Plus className="h-4 w-4 ml-1 inline-block" />
               </Button>
             </Link>
             <ol className="breadcrumb hidden-xs">
@@ -175,11 +234,11 @@ export default function AttendanceSummaryPage() {
         </div>
 
         <div className="white-box">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div>
-              <label className="block text-[12px] font-bold text-gray-600 mb-2">Employee Name</label>
+              <label className="block text-[12px] font-bold text-gray-600 mb-2">{canManageAttendance ? "Employee Name" : "My Profile"}</label>
               <select className="form-control" value={selectedEmployee} onChange={(event) => setSelectedEmployee(event.target.value)}>
-                <option value="all">All Employees</option>
+                <option value="all">{canManageAttendance ? "All Employees" : "My Attendance"}</option>
                 {employees.map((employee) => (
                   <option key={employee.id} value={employee.id}>{employee.name}</option>
                 ))}
@@ -206,14 +265,21 @@ export default function AttendanceSummaryPage() {
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} /> Apply
               </Button>
             </div>
+            <div>
+              <Button onClick={resetFilters} className="btn-default btn-block h-[34px]">
+                Reset
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="flex space-x-6 px-2 mb-4">
+        <div className="flex flex-wrap gap-6 px-2 mb-4">
           <div className="flex items-center space-x-2"><div className="h-4 w-4 bg-[#00c292] rounded-sm flex items-center justify-center"><Check className="h-2.5 w-2.5 text-white" /></div><span className="text-[11px] font-bold text-gray-500 uppercase">Present</span></div>
           <div className="flex items-center space-x-2"><div className="h-4 w-4 bg-[#fec107] rounded-sm flex items-center justify-center"><Check className="h-2.5 w-2.5 text-white" /></div><span className="text-[11px] font-bold text-gray-500 uppercase">Half Day</span></div>
           <div className="flex items-center space-x-2"><div className="h-4 w-4 bg-[#fb9678] rounded-sm flex items-center justify-center"><X className="h-2.5 w-2.5 text-white" /></div><span className="text-[11px] font-bold text-gray-500 uppercase">Absent</span></div>
           <div className="flex items-center space-x-2"><div className="h-4 w-4 bg-[#5475ed] rounded-sm flex items-center justify-center"><Star className="h-2.5 w-2.5 text-white" /></div><span className="text-[11px] font-bold text-gray-500 uppercase">Holiday</span></div>
+          <div className="flex items-center space-x-2"><div className="h-4 w-4 bg-[#7c3aed] rounded-sm flex items-center justify-center"><Star className="h-2.5 w-2.5 text-white" /></div><span className="text-[11px] font-bold text-gray-500 uppercase">Approved Leave</span></div>
+          <div className="flex items-center space-x-2"><div className="h-4 w-4 bg-gray-200 rounded-sm" /><span className="text-[11px] font-bold text-gray-500 uppercase">Closed/Future</span></div>
         </div>
 
         <div className="white-box p-0 overflow-hidden relative">
@@ -241,10 +307,14 @@ export default function AttendanceSummaryPage() {
                       const status = getDayStatus(employee.id, day);
                       return (
                         <td key={day} className="p-1 border-r text-center">
-                          {(status === "present" || status === "late") && <div className="mx-auto h-4 w-4 bg-[#00c292] rounded-sm flex items-center justify-center"><Check className="h-2.5 w-2.5 text-white" /></div>}
-                          {status === "half-day" && <div className="mx-auto h-4 w-4 bg-[#fec107] rounded-sm flex items-center justify-center"><Check className="h-2.5 w-2.5 text-white" /></div>}
-                          {status === "absent" && <div className="mx-auto h-4 w-4 bg-[#fb9678] rounded-sm flex items-center justify-center"><X className="h-2.5 w-2.5 text-white" /></div>}
-                          {status === "holiday" && <div className="mx-auto h-4 w-4 bg-[#5475ed] rounded-sm flex items-center justify-center"><Star className="h-2.5 w-2.5 text-white" /></div>}
+                          <button type="button" onClick={() => setSelectedDayDetail(getDayDetail(employee, day))} className="mx-auto flex h-6 w-6 items-center justify-center rounded-sm transition-transform hover:scale-110" title={`${employee.name} - ${day}`}>
+                            {(status === "present" || status === "late") && <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-[#00c292]"><Check className="h-2.5 w-2.5 text-white" /></span>}
+                            {status === "half-day" && <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-[#fec107]"><Check className="h-2.5 w-2.5 text-white" /></span>}
+                            {status === "absent" && <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-[#fb9678]"><X className="h-2.5 w-2.5 text-white" /></span>}
+                            {status === "holiday" && <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-[#5475ed]"><Star className="h-2.5 w-2.5 text-white" /></span>}
+                            {status === "leave" && <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-[#7c3aed]"><Star className="h-2.5 w-2.5 text-white" /></span>}
+                            {(status === "empty" || status === "closed") && <span className="h-2 w-2 rounded-full bg-gray-200" />}
+                          </button>
                         </td>
                       );
                     })}
@@ -260,6 +330,35 @@ export default function AttendanceSummaryPage() {
             </table>
           </div>
         </div>
+        {selectedDayDetail && (
+          <div className="white-box">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h4 className="m-0 text-sm font-black uppercase tracking-widest text-gray-800">{selectedDayDetail.employee.name} / {selectedDayDetail.date}</h4>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Status: {selectedDayDetail.status}</p>
+              </div>
+              <Button onClick={() => setSelectedDayDetail(null)} className="btn-default h-9 text-[10px]">Close</Button>
+            </div>
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Attendance</p>
+                <p className="mt-2 text-xs font-bold text-gray-700">
+                  {selectedDayDetail.attendance
+                    ? `${selectedDayDetail.attendance.clock_in || "--"} - ${selectedDayDetail.attendance.clock_out || "--"}`
+                    : "No attendance record"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Holiday</p>
+                <p className="mt-2 text-xs font-bold text-gray-700">{selectedDayDetail.holiday?.name || selectedDayDetail.holiday?.occassion || "No holiday"}</p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Leave</p>
+                <p className="mt-2 text-xs font-bold text-gray-700">{selectedDayDetail.leave?.leave_type?.type_name || selectedDayDetail.leave?.reason || "No approved leave"}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

@@ -80,14 +80,14 @@ function LoginFormContent() {
                 <p className="mt-1 text-[11px] font-medium text-slate-400">We Are Happy To See You Again</p>
               </div>
 
-              <div className="mb-5 grid h-[30px] grid-cols-2 rounded-full border border-slate-200 bg-white/55 p-[2px] shadow-inner">
-                <span className="flex items-center justify-center rounded-full bg-[#418af2] text-[10px] font-bold text-white shadow-[0_6px_14px_rgba(65,138,242,0.32)]">
+              {/* <div className="mb-5 grid h-[30px] grid-cols-2 rounded-full p-[2px] shadow-inner"> */}
+                {/* <span className="flex items-center justify-center rounded-full bg-[#418af2] text-[10px] font-bold text-white shadow-[0_6px_14px_rgba(65,138,242,0.32)]">
                   Sign in
-                </span>
-                <Link href="/signup" className="flex items-center justify-center rounded-full text-[10px] font-bold text-slate-500 transition hover:text-slate-950">
+                </span> */}
+                {/* <Link href="/signup" className="flex items-center justify-center rounded-full text-[10px] font-bold text-slate-500 transition hover:text-slate-950">
                   Sign Up
-                </Link>
-              </div>
+                </Link> */}
+              {/* </div> */}
 
               <form className="space-y-3" onSubmit={handleSubmit(onSubmit)}>
                 <div>
@@ -148,13 +148,13 @@ function LoginFormContent() {
                   ) : "Login"}
                 </button>
 
-                <div className="flex items-center gap-4 pt-6">
+                {/* <div className="flex items-center gap-4 pt-6">
                   <div className="h-px flex-1 bg-slate-200" />
                   <span className="text-[10px] font-semibold uppercase text-slate-400">Or</span>
                   <div className="h-px flex-1 bg-slate-200" />
-                </div>
+                </div> */}
 
-                <button type="button" className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-slate-950 text-[12px] font-semibold text-white shadow-[0_12px_24px_rgba(15,23,42,0.2)] transition hover:bg-slate-800">
+                {/* <button type="button" className="flex h-9 w-full items-center justify-center gap-2 rounded-full bg-slate-950 text-[12px] font-semibold text-white shadow-[0_12px_24px_rgba(15,23,42,0.2)] transition hover:bg-slate-800">
                   <Apple className="h-4 w-4" />
                   Log in with Apple
                 </button>
@@ -162,7 +162,7 @@ function LoginFormContent() {
                 <button type="button" className="flex h-9 w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white/75 text-[12px] font-semibold text-slate-600 transition hover:bg-white">
                   <span className="text-sm font-black text-[#4285f4]">G</span>
                   Log in with Google
-                </button>
+                </button> */}
               </form>
             </div>
           </div>

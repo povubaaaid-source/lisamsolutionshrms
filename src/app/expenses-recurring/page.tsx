@@ -3,7 +3,8 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { Plus, Sliders, Calendar, Search, RefreshCw, Eye, Edit, Trash2 } from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import { Plus, Sliders, Search, RefreshCw, Eye, Edit, Trash2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -16,6 +17,46 @@ const initialExpenses = [
 export default function ExpensesRecurringPage() {
   const [expenses, setExpenses] = useState(initialExpenses);
   const [showFilters, setShowFilters] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [employeeFilter, setEmployeeFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [viewingExpense, setViewingExpense] = useState<(typeof initialExpenses)[number] | null>(null);
+  const [deletingExpense, setDeletingExpense] = useState<(typeof initialExpenses)[number] | null>(null);
+
+  const filteredExpenses = expenses.filter((expense) => {
+    const query = searchTerm.trim().toLowerCase();
+    const searchMatch = !query || `${expense.item} ${expense.employee} ${expense.frequency} ${expense.status}`.toLowerCase().includes(query);
+    const startMatch = !dateFrom || expense.nextExpense >= dateFrom;
+    const endMatch = !dateTo || expense.nextExpense <= dateTo;
+    const employeeMatch = employeeFilter === "All" || expense.employee === employeeFilter;
+    const statusMatch = statusFilter === "All" || expense.status === statusFilter;
+    return searchMatch && startMatch && endMatch && employeeMatch && statusMatch;
+  });
+  const employeeOptions = Array.from(new Set(expenses.map((expense) => expense.employee)));
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setDateFrom("");
+    setDateTo("");
+    setEmployeeFilter("All");
+    setStatusFilter("All");
+  };
+
+  const addRecurringExpense = () => {
+    const nextId = Math.max(...expenses.map((expense) => expense.id), 0) + 1;
+    setExpenses((current) => [
+      { id: nextId, item: "New Recurring Expense", employee: "Admin", price: "$0.00", frequency: "Monthly", nextExpense: new Date().toISOString().slice(0, 10), status: "Active" },
+      ...current,
+    ]);
+  };
+
+  const deleteExpense = () => {
+    if (!deletingExpense) return;
+    setExpenses((current) => current.filter((expense) => expense.id !== deletingExpense.id));
+    setDeletingExpense(null);
+  };
 
   return (
     <DashboardLayout>
@@ -37,7 +78,7 @@ export default function ExpensesRecurringPage() {
               <Sliders className="h-3 w-3" />
               <span>Filter Results</span>
             </Button>
-            <Button className="flex items-center space-x-1 bg-primary hover:bg-primary/90 text-white border-none text-[10px] h-8 px-3">
+            <Button onClick={addRecurringExpense} className="flex items-center space-x-1 bg-primary hover:bg-primary/90 text-white border-none text-[10px] h-8 px-3">
               <Plus className="h-3 w-3" />
               <span>Add Recurring Expense</span>
             </Button>
@@ -46,33 +87,32 @@ export default function ExpensesRecurringPage() {
 
         {showFilters && (
           <Card className="p-6 bg-gray-50/50 border border-gray-100">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase">Select Date Range</label>
-                <div className="flex items-center w-full text-xs border border-gray-200 rounded p-2 bg-white cursor-pointer hover:bg-gray-50">
-                  <Calendar className="h-3.5 w-3.5 mr-2 text-gray-400" />
-                  <span>All Time</span>
-                </div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">From Date</label>
+                <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full text-xs border-gray-200 rounded p-2 bg-white" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-400 uppercase">To Date</label>
+                <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-full text-xs border-gray-200 rounded p-2 bg-white" />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-400 uppercase">Employee</label>
-                <select className="w-full text-xs border-gray-200 rounded p-2 bg-white">
+                <select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} className="w-full text-xs border-gray-200 rounded p-2 bg-white">
                   <option>All</option>
-                  <option>Admin</option>
-                  <option>John Doe</option>
+                  {employeeOptions.map((employee) => <option key={employee}>{employee}</option>)}
                 </select>
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-400 uppercase">Status</label>
-                <select className="w-full text-xs border-gray-200 rounded p-2 bg-white">
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full text-xs border-gray-200 rounded p-2 bg-white">
                   <option>All</option>
                   <option>Active</option>
                   <option>Inactive</option>
                 </select>
               </div>
-              <div className="md:col-span-3 flex justify-end space-x-2">
-                <Button className="bg-primary text-white text-[10px] h-9 px-6">Apply</Button>
-                <Button className="bg-gray-200 text-gray-600 text-[10px] h-9 px-6">Reset</Button>
+              <div className="md:col-span-4 flex justify-end space-x-2">
+                <Button onClick={resetFilters} className="bg-gray-200 text-gray-600 text-[10px] h-9 px-6">Reset</Button>
               </div>
             </div>
           </Card>
@@ -82,7 +122,7 @@ export default function ExpensesRecurringPage() {
           <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
             <div className="flex items-center space-x-2 border border-gray-100 rounded px-3 py-1.5 bg-gray-50/50 w-64 focus-within:bg-white focus-within:ring-1 focus-within:ring-primary/20 transition-all">
               <Search className="h-3.5 w-3.5 text-gray-400" />
-              <input type="text" placeholder="Search..." className="bg-transparent border-none text-xs w-full focus:outline-none text-gray-600" />
+              <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} type="search" placeholder="Search..." className="bg-transparent border-none text-xs w-full focus:outline-none text-gray-600" />
             </div>
           </div>
           <table className="w-full text-left text-sm">
@@ -99,7 +139,7 @@ export default function ExpensesRecurringPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {expenses.map((expense, i) => (
+              {filteredExpenses.map((expense, i) => (
                 <tr key={expense.id} className="hover:bg-gray-50 transition-colors group">
                   <td className="px-6 py-4 text-xs text-gray-400 font-medium">{i + 1}</td>
                   <td className="px-6 py-4 text-xs font-bold text-gray-700">{expense.item}</td>
@@ -121,23 +161,30 @@ export default function ExpensesRecurringPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-2 hover:bg-blue-50 text-gray-400 hover:text-blue-500 rounded transition-all" title="View">
+                      <button onClick={() => setViewingExpense(expense)} className="p-2 hover:bg-blue-50 text-gray-400 hover:text-blue-500 rounded transition-all" title="View">
                         <Eye className="h-3.5 w-3.5" />
                       </button>
-                      <button className="p-2 hover:bg-green-50 text-gray-400 hover:text-green-500 rounded transition-all" title="Edit">
+                      <button onClick={() => setExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, status: item.status === "Active" ? "Inactive" : "Active" } : item))} className="p-2 hover:bg-green-50 text-gray-400 hover:text-green-500 rounded transition-all" title="Toggle Status">
                         <Edit className="h-3.5 w-3.5" />
                       </button>
-                      <button className="p-2 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-all" title="Delete">
+                      <button onClick={() => setDeletingExpense(expense)} className="p-2 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-all" title="Delete">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {filteredExpenses.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    No recurring expenses found for selected filters
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
           <div className="px-6 py-4 bg-gray-50/30 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-            <span>Showing 1 to 3 of 3 entries</span>
+            <span>Showing {filteredExpenses.length} of {expenses.length} entries</span>
             <div className="flex items-center space-x-1">
               <button className="px-3 py-1 border border-gray-200 rounded hover:bg-white transition-colors">Prev</button>
               <button className="px-3 py-1 bg-primary text-white rounded border border-primary">1</button>
@@ -146,6 +193,28 @@ export default function ExpensesRecurringPage() {
           </div>
         </Card>
       </div>
+      <Modal isOpen={Boolean(viewingExpense)} onClose={() => setViewingExpense(null)} title="Recurring Expense Details" size="lg">
+        {viewingExpense && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {Object.entries(viewingExpense).map(([key, value]) => (
+              <div key={key} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{key}</p>
+                <p className="mt-1 text-sm font-bold text-gray-800">{String(value)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+      <Modal isOpen={Boolean(deletingExpense)} onClose={() => setDeletingExpense(null)} title="Delete Recurring Expense" size="sm">
+        <div className="py-6 text-center">
+          <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-red-500" />
+          <p className="mb-6 text-xs font-bold text-gray-500">This removes the selected recurring expense from the local list.</p>
+          <div className="flex gap-3">
+            <Button onClick={() => setDeletingExpense(null)} className="flex-1 bg-gray-100 text-gray-500">Cancel</Button>
+            <Button onClick={deleteExpense} className="flex-1 bg-red-500 text-white">Delete</Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 
 type ShiftSummary = {
   id?: number | string;
@@ -23,6 +24,8 @@ type ShiftSummary = {
 type EmployeeRecord = {
   id: number | string;
   name: string;
+  email?: string;
+  role?: string;
   employee_detail?: {
     designation?: { name?: string };
     shift_type_id?: number | string;
@@ -104,7 +107,13 @@ const getShiftLabel = (shift?: ShiftSummary) => {
 
 export default function MarkAttendancePage() {
   const { showToast } = useToast();
-  const [date, setDate] = useState("2026-05-08");
+  const { user, hasPermission } = useAuth();
+  const canManageAttendance =
+    user?.role === "admin" ||
+    hasPermission("attendance.manage") ||
+    hasPermission("attendance.edit") ||
+    hasPermission("attendance.approve");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [drafts, setDrafts] = useState<Record<string, AttendanceDraft>>({});
   const [loading, setLoading] = useState(true);
@@ -116,9 +125,15 @@ export default function MarkAttendancePage() {
       try {
         const response = await api.get("/employee");
         const employeeList = (response.data.data || []) as EmployeeRecord[];
-        setEmployees(employeeList);
+        const selfEmployee = employeeList.find((employee) =>
+          String(employee.id) === String(user?.id) ||
+          employee.email === user?.email ||
+          employee.name === user?.name
+        );
+        const visibleEmployees = canManageAttendance ? employeeList : employeeList.filter((employee) => String(employee.id) === String(selfEmployee?.id || user?.id));
+        setEmployees(visibleEmployees);
         setDrafts(
-          Object.fromEntries(employeeList.map((employee) => [String(employee.id), getDefaultDraft(employee)])),
+          Object.fromEntries(visibleEmployees.map((employee) => [String(employee.id), getDefaultDraft(employee)])),
         );
       } catch (err) {
         console.error("Fetch Attendance Employees Error:", err);
@@ -130,7 +145,7 @@ export default function MarkAttendancePage() {
 
     fetchEmployees();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canManageAttendance, user?.email, user?.id, user?.name]);
 
   const updateDraft = (employeeId: number | string, patch: Partial<AttendanceDraft>) => {
     const employee = employees.find((item) => String(item.id) === String(employeeId));

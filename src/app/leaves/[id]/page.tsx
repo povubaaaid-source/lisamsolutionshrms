@@ -10,6 +10,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import apiClient from "@/lib/api-client";
 import type { LucideIcon } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 const statusClasses: Record<string, string> = {
   approved: "bg-green-100 text-green-600",
@@ -26,8 +27,10 @@ type DetailField = {
 export default function LeaveDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const { user, hasPermission } = useAuth();
   const [status, setStatus] = useState("pending");
   const [rejectReason, setRejectReason] = useState("");
+  const canApproveLeaves = user?.role === "admin" || hasPermission("leaves.approve") || hasPermission("leaves.manage");
   const leave = useMemo(() => ({
     id: params.id || "preview",
     employee: "Alice Smith",
@@ -40,6 +43,7 @@ export default function LeaveDetailsPage() {
   }), [params.id]);
 
   const updateLeaveStatus = (nextStatus: "approved" | "rejected") => {
+    if (!canApproveLeaves) return;
     setStatus(nextStatus);
     apiClient.action("leaves", String(leave.id), nextStatus === "approved" ? "approve" : "reject", { reason: rejectReason }).catch((err) => {
       console.warn("Leave approval endpoint pending:", err);
@@ -101,10 +105,12 @@ export default function LeaveDetailsPage() {
           </div>
 
           <div className="space-y-6">
-            <Card title="Approval" className="border-none bg-white p-6 shadow-sm">
+            <Card title={canApproveLeaves ? "Approval" : "Request Status"} className="border-none bg-white p-6 shadow-sm">
               <span className={`${statusClasses[status]} mb-4 block rounded-full px-3 py-1 text-center text-[10px] font-black uppercase tracking-widest`}>
                 {status}
               </span>
+              {canApproveLeaves ? (
+              <>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => updateLeaveStatus("approved")} className="flex h-10 items-center justify-center rounded-xl bg-green-50 text-[10px] font-black uppercase tracking-widest text-green-600 hover:bg-green-500 hover:text-white">
                   <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
@@ -119,12 +125,18 @@ export default function LeaveDetailsPage() {
                 placeholder="Reject reason or approval note"
                 className="mt-4 h-24 w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs font-bold text-gray-600 outline-none focus:ring-2 focus:ring-primary/10"
               />
+              </>
+              ) : (
+                <p className="rounded-xl bg-gray-50 p-4 text-xs font-bold leading-relaxed text-gray-500">
+                  Employees can view their leave request and cancel pending requests from My Leaves. Approval and rejection are admin-only, matching the Laravel member flow.
+                </p>
+              )}
             </Card>
 
-            <Link href="/leaves/all" className="block rounded-2xl border border-gray-50 bg-white p-5 shadow-sm transition-colors hover:border-primary/20 hover:bg-primary/5">
+            <Link href={canApproveLeaves ? "/leaves/all" : "/leaves"} className="block rounded-2xl border border-gray-50 bg-white p-5 shadow-sm transition-colors hover:border-primary/20 hover:bg-primary/5">
               <Calendar className="mb-3 h-5 w-5 text-primary" />
-              <span className="block text-xs font-black uppercase tracking-widest text-gray-800">All Leaves</span>
-              <span className="mt-1 block text-xs font-medium text-gray-400">Open complete leave register</span>
+              <span className="block text-xs font-black uppercase tracking-widest text-gray-800">{canApproveLeaves ? "All Leaves" : "My Leaves"}</span>
+              <span className="mt-1 block text-xs font-medium text-gray-400">{canApproveLeaves ? "Open complete leave register" : "Return to my leave calendar"}</span>
             </Link>
           </div>
         </div>

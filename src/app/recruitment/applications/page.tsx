@@ -13,25 +13,82 @@ import {
   Download,
   X,
   Check,
-  FileText
+  FileText,
+  AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import Modal from "@/components/ui/Modal";
+import { useToast } from "@/context/ToastContext";
+
+const initialApplications = [
+  { id: 1, name: "Alice Johnson", job: "Full Stack Developer", location: "New York", status: "Applied", statusColor: "label-info", appliedDate: "2026-05-01" },
+  { id: 2, name: "Bob Williams", job: "Full Stack Developer", location: "New York", status: "Phone Screen", statusColor: "label-primary", appliedDate: "2026-05-03" },
+  { id: 3, name: "Carol Davis", job: "UI/UX Designer", location: "Remote", status: "Interview", statusColor: "label-warning", appliedDate: "2026-05-05" },
+  { id: 4, name: "Dan Brown", job: "HR Manager", location: "Chicago", status: "Hired", statusColor: "label-success", appliedDate: "2026-05-07" },
+  { id: 5, name: "Eve Miller", job: "Full Stack Developer", location: "New York", status: "Rejected", statusColor: "label-danger", appliedDate: "2026-05-09" },
+  { id: 6, name: "Frank Wilson", job: "UI/UX Designer", location: "Remote", status: "Applied", statusColor: "label-info", appliedDate: "2026-05-11" },
+];
+
+const statusKey = (status: string) => status.toLowerCase().replace(/\s+/g, "_");
+const jobKey = (job: string) => job === "Full Stack Developer" ? "1" : job === "UI/UX Designer" ? "2" : "3";
+const locationKey = (location: string) => location.toLowerCase().replace(/\s+/g, "_");
 
 export default function RecruitmentApplicationsPage() {
+  const { showToast } = useToast();
+  const [applications, setApplications] = useState(initialApplications);
   const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterJob, setFilterJob] = useState("all");
   const [filterLocation, setFilterLocation] = useState("all");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+  const [deletingApplicationId, setDeletingApplicationId] = useState<number | null>(null);
 
-  const applications = [
-    { id: 1, name: "Alice Johnson", job: "Full Stack Developer", location: "New York", status: "Applied", statusColor: "label-info" },
-    { id: 2, name: "Bob Williams", job: "Full Stack Developer", location: "New York", status: "Phone Screen", statusColor: "label-primary" },
-    { id: 3, name: "Carol Davis", job: "UI/UX Designer", location: "Remote", status: "Interview", statusColor: "label-warning" },
-    { id: 4, name: "Dan Brown", job: "HR Manager", location: "Chicago", status: "Hired", statusColor: "label-success" },
-    { id: 5, name: "Eve Miller", job: "Full Stack Developer", location: "New York", status: "Rejected", statusColor: "label-danger" },
-    { id: 6, name: "Frank Wilson", job: "UI/UX Designer", location: "Remote", status: "Applied", statusColor: "label-info" },
-  ];
+  const filteredApplications = applications.filter((application) => {
+    const matchesStatus = filterStatus === "all" || statusKey(application.status) === filterStatus;
+    const matchesJob = filterJob === "all" || jobKey(application.job) === filterJob;
+    const matchesLocation = filterLocation === "all" || locationKey(application.location) === filterLocation;
+    const matchesFrom = !filterFrom || application.appliedDate >= filterFrom;
+    const matchesTo = !filterTo || application.appliedDate <= filterTo;
+    return matchesStatus && matchesJob && matchesLocation && matchesFrom && matchesTo;
+  });
+
+  const resetFilters = () => {
+    setFilterStatus("all");
+    setFilterJob("all");
+    setFilterLocation("all");
+    setFilterFrom("");
+    setFilterTo("");
+  };
+
+  const exportApplications = () => {
+    const rows = [
+      ["Applicant Name", "Job", "Location", "Applied Date", "Status"],
+      ...filteredApplications.map((application) => [
+        application.name,
+        application.job,
+        application.location,
+        application.appliedDate,
+        application.status,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "job-applications.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("Applications exported", "success");
+  };
+
+  const deleteApplication = () => {
+    if (!deletingApplicationId) return;
+    setApplications((prev) => prev.filter((application) => application.id !== deletingApplicationId));
+    setDeletingApplicationId(null);
+    showToast("Application deleted locally. PHP endpoint should persist deletion.", "success");
+  };
 
   return (
     <DashboardLayout>
@@ -70,11 +127,11 @@ export default function RecruitmentApplicationsPage() {
                 <Columns className="h-4 w-4 mr-1" /> Board View
               </Button>
             </Link>
-            <Button className="btn-info btn-sm">
+            <Button onClick={() => showToast("Recruitment mail settings should open the backend-driven settings route.", "success")} className="btn-info btn-sm">
               <Mail className="h-4 w-4 mr-1" /> Mail Settings
             </Button>
             <div className="ml-auto">
-              <Button className="btn-primary btn-sm">
+              <Button onClick={exportApplications} className="btn-primary btn-sm">
                 <Download className="h-4 w-4 mr-1" /> Export
               </Button>
             </div>
@@ -89,10 +146,10 @@ export default function RecruitmentApplicationsPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div>
-                  <input type="text" className="form-control" placeholder="Show Results From" />
+                  <input type="date" className="form-control" value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} />
                 </div>
                 <div>
-                  <input type="text" className="form-control" placeholder="Show Results To" />
+                  <input type="date" className="form-control" value={filterTo} onChange={(event) => setFilterTo(event.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -118,8 +175,8 @@ export default function RecruitmentApplicationsPage() {
                 </select>
               </div>
               <div className="flex gap-2">
-                <Button className="btn-success btn-sm"><Check className="h-4 w-4 mr-1" /> Apply</Button>
-                <Button className="btn-inverse btn-sm">Reset</Button>
+                <Button onClick={() => showToast(`${filteredApplications.length} applications match these filters.`, "success")} className="btn-success btn-sm"><Check className="h-4 w-4 mr-1" /> Apply</Button>
+                <Button onClick={resetFilters} className="btn-inverse btn-sm">Reset</Button>
               </div>
             </div>
           )}
@@ -138,7 +195,7 @@ export default function RecruitmentApplicationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {applications.map((app, index) => (
+                {filteredApplications.map((app, index) => (
                   <tr key={app.id}>
                     <td>{index + 1}</td>
                     <td className="font-bold">{app.name}</td>
@@ -152,17 +209,44 @@ export default function RecruitmentApplicationsPage() {
                         <Link href={`/recruitment/applications/${app.id}`}>
                           <button className="btn-info btn-outline p-1 rounded hover:bg-info hover:text-white transition-all" title="View"><Eye className="h-4 w-4" /></button>
                         </Link>
-                        <button className="btn-default btn-outline p-1 rounded hover:bg-gray-200 transition-all" title="Documents"><FileText className="h-4 w-4" /></button>
-                        <button className="btn-danger btn-outline p-1 rounded hover:bg-danger hover:text-white transition-all" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => showToast("Application documents are ready for PHP API wiring.", "success")} className="btn-default btn-outline p-1 rounded hover:bg-gray-200 transition-all" title="Documents"><FileText className="h-4 w-4" /></button>
+                        <button onClick={() => setDeletingApplicationId(app.id)} className="btn-danger btn-outline p-1 rounded hover:bg-danger hover:text-white transition-all" title="Delete"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
                   </tr>
                 ))}
+                {filteredApplications.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      No applications match these filters
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={!!deletingApplicationId}
+        onClose={() => setDeletingApplicationId(null)}
+        title="Delete Application"
+        size="sm"
+      >
+        <div className="text-center py-4">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <p className="mb-7 text-xs font-medium leading-relaxed text-gray-500">
+            This removes the application from the current recruitment list.
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => setDeletingApplicationId(null)} className="btn-default flex-1">Cancel</Button>
+            <Button onClick={deleteApplication} className="btn-danger flex-1">Delete</Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

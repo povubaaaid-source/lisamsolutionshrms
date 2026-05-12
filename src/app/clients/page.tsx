@@ -2,7 +2,7 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, RefreshCw, Edit, Trash2, Eye, AlertTriangle } from "lucide-react";
+import { Plus, RefreshCw, Edit, Trash2, Eye, AlertTriangle, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -15,6 +15,7 @@ import { Client, ApiResponse } from "@/types";
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [deletingClientId, setDeletingClientId] = useState<number | string | null>(null);
   const { showToast } = useToast();
@@ -63,7 +64,18 @@ export default function ClientsPage() {
   };
 
   const filteredClients = clients.filter(c => {
-    return statusFilter === "All" || c.status.toLowerCase() === statusFilter.toLowerCase();
+    const query = searchTerm.trim().toLowerCase();
+    const searchText = [
+      c.name,
+      c.email,
+      c.status,
+      c.client_detail?.company_name,
+      c.client_detail?.mobile,
+      c.client_detail?.address,
+    ].filter(Boolean).join(" ").toLowerCase();
+    const searchMatch = !query || searchText.includes(query);
+    const statusMatch = statusFilter === "All" || c.status.toLowerCase() === statusFilter.toLowerCase();
+    return searchMatch && statusMatch;
   });
 
   const activeCount = clients.filter(c => c.status === "active").length;
@@ -110,6 +122,19 @@ export default function ClientsPage() {
         {/* Filters */}
         <Card className="p-5 border-none shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div className="lg:col-span-2">
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="w-full rounded-lg border border-gray-100 bg-white py-2 pl-9 pr-3 text-xs font-bold outline-none transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  placeholder="Search client, company, email"
+                  type="search"
+                />
+              </div>
+            </div>
             <div>
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Status</label>
               <select 
@@ -122,10 +147,12 @@ export default function ClientsPage() {
                 <option value="deactive">Deactive</option>
               </select>
             </div>
-            <div className="lg:col-span-2"></div>
             <div className="flex justify-end">
               <button 
-                onClick={() => setStatusFilter("All")}
+                onClick={() => {
+                  setSearchTerm("");
+                  setStatusFilter("All");
+                }}
                 className="flex items-center space-x-1 rounded-lg border border-gray-200 px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-50 transition-all"
               >
                 <RefreshCw className="h-3.5 w-3.5 mr-1" /><span>Reset</span>

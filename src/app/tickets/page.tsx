@@ -44,6 +44,8 @@ export default function TicketsPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [deletingTicketId, setDeletingTicketId] = useState<number | string | null>(null);
@@ -70,9 +72,12 @@ export default function TicketsPage() {
   }, []);
 
   const filteredTickets = tickets.filter((ticket) => {
+    const ticketDate = getTicketDate(ticket);
+    const startMatch = !dateFrom || (ticketDate !== "N/A" && ticketDate >= dateFrom);
+    const endMatch = !dateTo || (ticketDate !== "N/A" && ticketDate <= dateTo);
     const statusMatch = statusFilter === "all" || ticket.status === statusFilter;
     const priorityMatch = priorityFilter === "all" || ticket.priority === priorityFilter;
-    return statusMatch && priorityMatch;
+    return startMatch && endMatch && statusMatch && priorityMatch;
   });
 
   const handleDelete = async () => {
@@ -90,6 +95,8 @@ export default function TicketsPage() {
   };
 
   const resetFilters = () => {
+    setDateFrom("");
+    setDateTo("");
     setStatusFilter("all");
     setPriorityFilter("all");
   };
@@ -121,11 +128,18 @@ export default function TicketsPage() {
 
         {/* Filter Section (Legacy Pattern) */}
         <div className="white-box">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                 <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Select Date Range</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">From Date</label>
                     <div className="relative">
-                        <input type="text" className="form-control pl-8" placeholder="01-05-2024 - 07-05-2024" />
+                        <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="form-control pl-8" />
+                        <Calendar className="h-3 w-3 absolute left-3 top-2.5 text-gray-400" />
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">To Date</label>
+                    <div className="relative">
+                        <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="form-control pl-8" />
                         <Calendar className="h-3 w-3 absolute left-3 top-2.5 text-gray-400" />
                     </div>
                 </div>
@@ -150,7 +164,7 @@ export default function TicketsPage() {
                     </select>
                 </div>
                 <div className="flex space-x-2">
-                    <Button className="btn-success btn-sm flex-1"><Check className="h-4 w-4 mr-1" /> Apply</Button>
+                    <Button onClick={fetchTickets} className="btn-success btn-sm flex-1"><Check className="h-4 w-4 mr-1" /> Apply</Button>
                     <Button onClick={resetFilters} className="btn-inverse btn-sm flex-1"><RefreshCw className="h-4 w-4 mr-1" /> Reset</Button>
                 </div>
             </div>

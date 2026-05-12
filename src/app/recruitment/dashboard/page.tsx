@@ -59,8 +59,8 @@ export default function RecruitmentDashboardPage() {
           {stats.map((stat, idx) => (
             <Link href={stat.link} key={idx}>
               <div className={`${stat.bg} text-white rounded p-6 text-center hover:opacity-90 transition-all cursor-pointer`}>
-                <h1 className="text-3xl font-light mb-1">{stat.value}</h1>
-                <h6 className="text-[11px] font-bold uppercase tracking-wider opacity-80">{stat.label}</h6>
+                <h1 className="text-3xl text-white font-light mb-1">{stat.value}</h1>
+                <h6 className="text-[11px] text-white font-bold uppercase tracking-wider opacity-80">{stat.label}</h6>
               </div>
             </Link>
           ))}

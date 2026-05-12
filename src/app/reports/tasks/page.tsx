@@ -3,16 +3,11 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
 import { Filter, RefreshCw, BarChart, PieChart as PieIcon, TrendingUp, Download, Calendar, Search, Users, Briefcase } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-
-const taskStats = [
-  { label: "To Complete", value: 45, color: "#3b82f6", bg: "bg-blue-500" },
-  { label: "Completed", value: 120, color: "#10b981", bg: "bg-green-500" },
-  { label: "Pending", value: 15, color: "#f59e0b", bg: "bg-yellow-500" },
-];
+import StableResponsiveContainer from "@/components/charts/StableResponsiveContainer";
+import { PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 
 const taskRows = [
   { id: 1, project: "Website Redesign", task: "Design Homepage", assignee: "John Doe", dueDate: "2026-05-10", status: "In Progress" },
@@ -24,8 +19,28 @@ const taskRows = [
 
 export default function TaskReportPage() {
   const [loading, setLoading] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [employeeFilter, setEmployeeFilter] = useState("");
 
-  const chartData = taskStats.map(stat => ({
+  const filteredTaskRows = taskRows.filter((row) => {
+    const startMatch = !dateFrom || row.dueDate >= dateFrom;
+    const endMatch = !dateTo || row.dueDate <= dateTo;
+    const projectMatch = !projectFilter || row.project === projectFilter;
+    const employeeMatch = !employeeFilter || row.assignee === employeeFilter;
+    return startMatch && endMatch && projectMatch && employeeMatch;
+  });
+
+  const filteredTaskStats = [
+    { label: "To Complete", value: filteredTaskRows.filter((row) => row.status !== "Completed").length, color: "#3b82f6", bg: "bg-blue-500" },
+    { label: "Completed", value: filteredTaskRows.filter((row) => row.status === "Completed").length, color: "#10b981", bg: "bg-green-500" },
+    { label: "Pending", value: filteredTaskRows.filter((row) => row.status === "To Do").length, color: "#f59e0b", bg: "bg-yellow-500" },
+  ];
+  const projectOptions = Array.from(new Set(taskRows.map((row) => row.project)));
+  const employeeOptions = Array.from(new Set(taskRows.map((row) => row.assignee)));
+
+  const chartData = filteredTaskStats.map(stat => ({
     name: stat.label,
     value: stat.value,
     color: stat.color
@@ -34,6 +49,13 @@ export default function TaskReportPage() {
   const handleRefresh = () => {
     setLoading(true);
     setTimeout(() => setLoading(false), 800);
+  };
+
+  const handleReset = () => {
+    setDateFrom("");
+    setDateTo("");
+    setProjectFilter("");
+    setEmployeeFilter("");
   };
 
   return (
@@ -66,22 +88,26 @@ export default function TaskReportPage() {
         <Card className="border-none shadow-sm p-6 bg-white mb-6">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="md:col-span-3">
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Date Range</label>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">From Date</label>
               <div className="relative">
                 <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                <div className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-4 text-xs font-bold text-gray-500 cursor-pointer">
-                   Select Date Range
-                </div>
+                <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full bg-gray-50/50 rounded-xl py-3 pl-11 pr-4 text-xs font-bold text-gray-500" />
+              </div>
+            </div>
+            <div className="md:col-span-3">
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">To Date</label>
+              <div className="relative">
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-full bg-gray-50/50 rounded-xl py-3 pl-11 pr-4 text-xs font-bold text-gray-500" />
               </div>
             </div>
             <div className="md:col-span-3">
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Project</label>
               <div className="relative">
                 <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                <select className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-10 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
+                <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} className="w-full bg-gray-50/50 rounded-xl py-3 pl-11 pr-10 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
                   <option value="">All Projects</option>
-                  <option>Website Redesign</option>
-                  <option>Mobile App</option>
+                  {projectOptions.map((project) => <option key={project} value={project}>{project}</option>)}
                 </select>
               </div>
             </div>
@@ -89,18 +115,17 @@ export default function TaskReportPage() {
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Employee</label>
               <div className="relative">
                 <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                <select className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-10 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
+                <select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} className="w-full bg-gray-50/50 rounded-xl py-3 pl-11 pr-10 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
                   <option value="">All Employees</option>
-                  <option>John Doe</option>
-                  <option>Jane Smith</option>
+                  {employeeOptions.map((employee) => <option key={employee} value={employee}>{employee}</option>)}
                 </select>
               </div>
             </div>
-            <div className="md:col-span-3 flex items-end space-x-2">
-              <Button className="flex-1 bg-primary text-white text-[10px] font-black h-11 uppercase tracking-widest">
+            <div className="md:col-span-12 flex items-end justify-end space-x-2">
+              <Button onClick={handleRefresh} className="bg-primary text-white text-[10px] font-black h-11 px-8 uppercase tracking-widest">
                 Apply
               </Button>
-              <Button className="bg-gray-100 text-gray-500 border-none px-6 h-11 text-[10px] font-black uppercase tracking-widest">
+              <Button onClick={handleReset} className="bg-gray-100 text-gray-500 border-none px-6 h-11 text-[10px] font-black uppercase tracking-widest">
                 Reset
               </Button>
             </div>
@@ -109,7 +134,7 @@ export default function TaskReportPage() {
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {taskStats.map((stat, i) => (
+          {filteredTaskStats.map((stat, i) => (
             <Card key={i} className="border-none shadow-sm p-6 bg-white overflow-hidden relative group">
               <div className="flex items-center justify-between relative z-10">
                 <div>
@@ -134,42 +159,40 @@ export default function TaskReportPage() {
               <PieIcon className="h-4 w-4 mr-2 text-primary" />
               Status Breakdown
             </h3>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }}
-                  />
-                  <Legend 
-                    verticalAlign="bottom" 
-                    height={36}
-                    content={({ payload }) => (
-                      <ul className="flex justify-center space-x-4 mt-4">
-                        {payload?.map((entry: any, index: number) => (
-                          <li key={`item-${index}`} className="flex items-center text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                            <span className="w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: entry.color }}></span>
-                            {entry.value}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <StableResponsiveContainer height={256}>
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }}
+                />
+                <Legend 
+                  verticalAlign="bottom" 
+                  height={36}
+                  content={({ payload }) => (
+                    <ul className="flex justify-center space-x-4 mt-4">
+                      {payload?.map((entry: any, index: number) => (
+                        <li key={`item-${index}`} className="flex items-center text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                          <span className="w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: entry.color }}></span>
+                          {entry.value}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                />
+              </PieChart>
+            </StableResponsiveContainer>
           </Card>
 
           <Card className="lg:col-span-8 border-none shadow-sm bg-white overflow-hidden p-0">
@@ -192,7 +215,7 @@ export default function TaskReportPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {taskRows.map((row, i) => (
+                  {filteredTaskRows.map((row, i) => (
                     <tr key={row.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="px-6 py-4 text-xs font-bold text-gray-300 text-center">{i + 1}</td>
                       <td className="px-6 py-4">
@@ -217,6 +240,13 @@ export default function TaskReportPage() {
                       </td>
                     </tr>
                   ))}
+                  {filteredTaskRows.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                        No tasks found for selected filters
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -226,4 +256,3 @@ export default function TaskReportPage() {
     </DashboardLayout>
   );
 }
-

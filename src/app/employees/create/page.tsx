@@ -143,8 +143,32 @@ export default function CreateEmployeePage() {
     e.preventDefault();
     setLoading(true);
     try {
-      // Simulate API call to admin.employees.store
-      const response = await api.post("/employee", formData);
+      const selectedDesignation = designations.find((designation) => String(designation.id) === String(formData.designation));
+      const selectedDepartment = departments.find((department) => String(department.id) === String(formData.department));
+      const selectedShift = shiftTypes.find((shift) => String(shift.id) === String(formData.shift_type_id));
+      const payload = {
+        ...formData,
+        designation_id: formData.designation,
+        designation_name: selectedDesignation?.name || "",
+        department_id: formData.department,
+        team_id: formData.department,
+        department_name: selectedDepartment?.team_name || "",
+        shift_type_id: formData.shift_type_id || null,
+        shift_type: selectedShift || null,
+        employee_detail: {
+          employee_id: formData.employee_id,
+          address: formData.address,
+          hourly_rate: formData.hourly_rate,
+          slack_username: formData.slack_username,
+          joining_date: formData.joining_date,
+          last_date: formData.last_date,
+          department_id: formData.department,
+          designation_id: formData.designation,
+          shift_type_id: formData.shift_type_id || null,
+          mobile: formData.mobile,
+        },
+      };
+      const response = await api.post("/employee", payload);
       const createdEmployeeId = response.data?.data?.id;
 
       if (createdEmployeeId) {

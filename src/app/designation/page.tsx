@@ -3,7 +3,8 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { Plus, Settings, X, MoreHorizontal, RefreshCw, Users, AlertTriangle, Briefcase } from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import { Plus, Settings, X, MoreHorizontal, RefreshCw, Users, AlertTriangle, Briefcase, Save } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
@@ -12,13 +13,21 @@ import { useToast } from "@/context/ToastContext";
 export default function DesignationPage() {
   const { showToast } = useToast();
   const [designations, setDesignations] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingDesignation, setEditingDesignation] = useState<any | null>(null);
+  const [deletingDesignationId, setDeletingDesignationId] = useState<number | string | null>(null);
+  const [designationForm, setDesignationForm] = useState({ name: "" });
 
   const fetchDesignations = async () => {
     setLoading(true);
     try {
-      const response = await api.get("/designation");
-      setDesignations(response.data.data || []);
+      const [designationResponse, employeeResponse] = await Promise.all([
+        api.get("/designation"),
+        api.get("/employee"),
+      ]);
+      setDesignations(designationResponse.data.data || []);
+      setEmployees(employeeResponse.data.data || []);
     } catch (err: any) {
       console.error("Fetch Designations Error:", err);
       // Fallback data if API is down for UI design purposes
@@ -35,6 +44,70 @@ export default function DesignationPage() {
   useEffect(() => {
     fetchDesignations();
   }, []);
+
+  const openDesignationEditor = (designation: any) => {
+    setEditingDesignation(designation);
+    setDesignationForm({ name: designation.name || "" });
+  };
+
+  const getAssignedEmployees = (designation: any) => {
+    const designationId = String(designation.id);
+    const designationName = String(designation.name || "");
+    const relationMembers = (designation.member || designation.members || []).map((member: any) => member.user || member);
+    const computedMembers = employees.filter((employee) => {
+      const detailDesignation = employee.employee_detail?.designation;
+      return String(employee.employee_detail?.designation_id || detailDesignation?.id || "") === designationId ||
+        detailDesignation?.name === designationName;
+    });
+
+    const map = new Map<string, any>();
+    [...relationMembers, ...computedMembers].forEach((employee: any) => {
+      const key = String(employee.id || employee.name);
+      if (key) map.set(key, employee);
+    });
+    return Array.from(map.values());
+  };
+
+  const handleUpdateDesignation = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingDesignation) return;
+
+    try {
+      await api.put(`/designation/${editingDesignation.id}`, designationForm);
+      showToast("Designation updated successfully", "success");
+    } catch (err) {
+      console.warn("Update Designation Error:", err);
+      showToast("Designation updated locally. PHP endpoint should persist this payload.", "error");
+    } finally {
+      setDesignations((prev) =>
+        prev.map((designation) =>
+          designation.id === editingDesignation.id ? { ...designation, name: designationForm.name } : designation
+        )
+      );
+      setEditingDesignation(null);
+    }
+  };
+
+  const handleDeleteDesignation = async () => {
+    if (!deletingDesignationId) return;
+    const designation = designations.find((item) => String(item.id) === String(deletingDesignationId));
+    const assignedEmployees = designation ? getAssignedEmployees(designation) : [];
+    if (assignedEmployees.length > 0) {
+      showToast(`Reassign ${assignedEmployees.length} employee(s) before deleting this designation.`, "error");
+      return;
+    }
+
+    try {
+      await api.delete(`/designation/${deletingDesignationId}`);
+      showToast("Designation deleted successfully", "success");
+    } catch (err) {
+      console.warn("Delete Designation Error:", err);
+      showToast("Designation removed locally. PHP endpoint should persist deletion.", "error");
+    } finally {
+      setDesignations((prev) => prev.filter((designation) => designation.id !== deletingDesignationId));
+      setDeletingDesignationId(null);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -82,7 +155,9 @@ export default function DesignationPage() {
                  </thead>
                  <tbody className="divide-y divide-gray-50">
                     {designations.length > 0 ? (
-                       designations.map((des, i) => (
+                       designations.map((des, i) => {
+                        const assignedEmployees = getAssignedEmployees(des);
+                        return (
                           <tr key={des.id} className="hover:bg-gray-50/50 transition-colors group">
                              <td className="px-8 py-5 text-xs font-bold text-gray-400">{i + 1}</td>
                              <td className="px-8 py-5">
@@ -93,14 +168,14 @@ export default function DesignationPage() {
                                    <div>
                                       <p className="text-xs font-black text-gray-800 group-hover:text-primary transition-colors uppercase tracking-tight">{des.name}</p>
                                       <span className="inline-flex mt-1 items-center bg-green-50 text-green-600 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest">
-                                         {des.member?.length || des.members?.length || 0} Members
+                                         {assignedEmployees.length} Members
                                       </span>
                                    </div>
                                 </div>
                              </td>
                              <td className="px-8 py-5">
                                 <div className="flex -space-x-3">
-                                   {(des.member || des.members || []).map((m: any, idx: number) => {
+                                   {assignedEmployees.map((m: any, idx: number) => {
                                       const memberName = m.user?.name || m.name || "?";
                                       return (
                                         <div key={idx} className="h-9 w-9 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-500 shadow-sm hover:z-10 hover:-translate-y-1 transition-all" title={memberName}>
@@ -108,25 +183,24 @@ export default function DesignationPage() {
                                         </div>
                                       );
                                    })}
-                                   {(!des.member && !des.members || (des.member || des.members).length === 0) && (
+                                   {assignedEmployees.length === 0 && (
                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Members</span>
                                    )}
                                 </div>
                              </td>
                              <td className="px-8 py-5 text-right">
                                 <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                   <Link href={`/designation/${des.id}/edit`}>
-                                      <button className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-primary transition-all" title="Manage Designation">
-                                         <Settings className="h-4 w-4" />
-                                      </button>
-                                   </Link>
-                                   <button className="p-2 hover:bg-red-50 rounded-xl text-gray-400 hover:text-red-500 transition-all" title="Delete">
+                                   <button onClick={() => openDesignationEditor(des)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-primary transition-all" title="Manage Designation">
+                                      <Settings className="h-4 w-4" />
+                                   </button>
+                                   <button onClick={() => setDeletingDesignationId(des.id)} className={`p-2 rounded-xl transition-all ${assignedEmployees.length > 0 ? "text-gray-300 hover:bg-gray-50" : "text-gray-400 hover:bg-red-50 hover:text-red-500"}`} title={assignedEmployees.length > 0 ? "Reassign employees before deleting" : "Delete"}>
                                       <X className="h-4 w-4" />
                                    </button>
                                 </div>
                              </td>
                           </tr>
-                       ))
+                        );
+                       })
                     ) : !loading && (
                        <tr>
                           <td colSpan={4} className="px-8 py-24 text-center">
@@ -148,6 +222,43 @@ export default function DesignationPage() {
            </div>
         </Card>
       </div>
+
+      <Modal isOpen={!!editingDesignation} onClose={() => setEditingDesignation(null)} title="Edit Designation" size="sm">
+        <form onSubmit={handleUpdateDesignation} className="space-y-4">
+          <input required value={designationForm.name} onChange={(event) => setDesignationForm({ name: event.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" placeholder="Designation name" />
+          <div className="flex gap-3 pt-3">
+            <Button type="button" onClick={() => setEditingDesignation(null)} className="flex-1 bg-gray-100 text-gray-600 border-none h-11 text-[10px] font-black uppercase tracking-widest">Cancel</Button>
+            <Button type="submit" className="flex-1 bg-primary text-white h-11 text-[10px] font-black uppercase tracking-widest"><Save className="h-4 w-4 mr-2" /> Save</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={!!deletingDesignationId} onClose={() => setDeletingDesignationId(null)} title="Delete Designation" size="sm">
+        <div className="text-center py-4">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <p className="mb-7 text-xs font-medium text-gray-500">
+            {(() => {
+              const designation = designations.find((item) => String(item.id) === String(deletingDesignationId));
+              const assignedCount = designation ? getAssignedEmployees(designation).length : 0;
+              return assignedCount > 0
+                ? `${assignedCount} employee(s) are still assigned. Reassign them before deleting.`
+                : "This removes the designation from the roles directory.";
+            })()}
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => setDeletingDesignationId(null)} className="flex-1 bg-gray-100 text-gray-600 border-none h-11 text-[10px] font-black uppercase tracking-widest">Cancel</Button>
+            <Button
+              onClick={handleDeleteDesignation}
+              disabled={Boolean(designations.find((item) => String(item.id) === String(deletingDesignationId)) && getAssignedEmployees(designations.find((item) => String(item.id) === String(deletingDesignationId))).length > 0)}
+              className="flex-1 bg-red-500 text-white h-11 text-[10px] font-black uppercase tracking-widest"
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

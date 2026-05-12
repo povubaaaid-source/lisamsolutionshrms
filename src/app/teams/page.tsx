@@ -3,7 +3,8 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { Plus, Settings, X, MoreHorizontal, RefreshCw, Users, AlertTriangle, Layers } from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import { Plus, Settings, X, MoreHorizontal, RefreshCw, Users, AlertTriangle, Layers, Save } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
@@ -12,13 +13,21 @@ import { useToast } from "@/context/ToastContext";
 export default function TeamsPage() {
   const { showToast } = useToast();
   const [departments, setDepartments] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingDepartment, setEditingDepartment] = useState<any | null>(null);
+  const [deletingDepartmentId, setDeletingDepartmentId] = useState<number | string | null>(null);
+  const [departmentForm, setDepartmentForm] = useState({ name: "" });
 
   const fetchDepartments = async () => {
     setLoading(true);
     try {
-      const response = await api.get("/department");
-      setDepartments(response.data.data || []);
+      const [departmentResponse, employeeResponse] = await Promise.all([
+        api.get("/department"),
+        api.get("/employee"),
+      ]);
+      setDepartments(departmentResponse.data.data || []);
+      setEmployees(employeeResponse.data.data || []);
     } catch (err: any) {
       console.error("Fetch Departments Error:", err);
       // Fallback data if API is down for UI design purposes
@@ -35,6 +44,73 @@ export default function TeamsPage() {
   useEffect(() => {
     fetchDepartments();
   }, []);
+
+  const openDepartmentEditor = (department: any) => {
+    setEditingDepartment(department);
+    setDepartmentForm({ name: department.team_name || department.name || "" });
+  };
+
+  const getAssignedEmployees = (department: any) => {
+    const departmentId = String(department.id);
+    const departmentName = String(department.team_name || department.name || "");
+    const relationMembers = (department.member || department.members || []).map((member: any) => member.user || member);
+    const computedMembers = employees.filter((employee) => {
+      const detailDepartment = employee.employee_detail?.department;
+      return String(employee.employee_detail?.department_id || detailDepartment?.id || "") === departmentId ||
+        detailDepartment?.team_name === departmentName ||
+        detailDepartment?.name === departmentName;
+    });
+
+    const map = new Map<string, any>();
+    [...relationMembers, ...computedMembers].forEach((employee: any) => {
+      const key = String(employee.id || employee.name);
+      if (key) map.set(key, employee);
+    });
+    return Array.from(map.values());
+  };
+
+  const handleUpdateDepartment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingDepartment) return;
+
+    try {
+      await api.put(`/department/${editingDepartment.id}`, { name: departmentForm.name, team_name: departmentForm.name });
+      showToast("Department updated successfully", "success");
+    } catch (err) {
+      console.warn("Update Department Error:", err);
+      showToast("Department updated locally. PHP endpoint should persist this payload.", "error");
+    } finally {
+      setDepartments((prev) =>
+        prev.map((department) =>
+          department.id === editingDepartment.id
+            ? { ...department, name: departmentForm.name, team_name: departmentForm.name }
+            : department
+        )
+      );
+      setEditingDepartment(null);
+    }
+  };
+
+  const handleDeleteDepartment = async () => {
+    if (!deletingDepartmentId) return;
+    const department = departments.find((item) => String(item.id) === String(deletingDepartmentId));
+    const assignedEmployees = department ? getAssignedEmployees(department) : [];
+    if (assignedEmployees.length > 0) {
+      showToast(`Reassign ${assignedEmployees.length} employee(s) before deleting this department.`, "error");
+      return;
+    }
+
+    try {
+      await api.delete(`/department/${deletingDepartmentId}`);
+      showToast("Department deleted successfully", "success");
+    } catch (err) {
+      console.warn("Delete Department Error:", err);
+      showToast("Department removed locally. PHP endpoint should persist deletion.", "error");
+    } finally {
+      setDepartments((prev) => prev.filter((department) => department.id !== deletingDepartmentId));
+      setDeletingDepartmentId(null);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -82,7 +158,9 @@ export default function TeamsPage() {
                  </thead>
                  <tbody className="divide-y divide-gray-50">
                     {departments.length > 0 ? (
-                       departments.map((dept, i) => (
+                       departments.map((dept, i) => {
+                        const assignedEmployees = getAssignedEmployees(dept);
+                        return (
                           <tr key={dept.id} className="hover:bg-gray-50/50 transition-colors group">
                              <td className="px-8 py-5 text-xs font-bold text-gray-400">{i + 1}</td>
                              <td className="px-8 py-5">
@@ -93,14 +171,14 @@ export default function TeamsPage() {
                                    <div>
                                       <p className="text-xs font-black text-gray-800 group-hover:text-primary transition-colors uppercase tracking-tight">{dept.team_name || dept.name}</p>
                                       <span className="inline-flex mt-1 items-center bg-green-50 text-green-600 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest">
-                                         {dept.member?.length || dept.members?.length || 0} Members
+                                         {assignedEmployees.length} Members
                                       </span>
                                    </div>
                                 </div>
                              </td>
                              <td className="px-8 py-5">
                                 <div className="flex -space-x-3">
-                                   {(dept.member || dept.members || []).map((m: any, idx: number) => {
+                                   {assignedEmployees.map((m: any, idx: number) => {
                                       const memberName = m.user?.name || m.name || "?";
                                       return (
                                         <div key={idx} className="h-9 w-9 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-500 shadow-sm hover:z-10 hover:-translate-y-1 transition-all" title={memberName}>
@@ -108,25 +186,24 @@ export default function TeamsPage() {
                                         </div>
                                       );
                                    })}
-                                   {(!dept.member && !dept.members || (dept.member || dept.members).length === 0) && (
+                                   {assignedEmployees.length === 0 && (
                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Members</span>
                                    )}
                                 </div>
                              </td>
                              <td className="px-8 py-5 text-right">
                                 <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                   <Link href={`/teams/${dept.id}/edit`}>
-                                      <button className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-primary transition-all" title="Manage Department">
-                                         <Settings className="h-4 w-4" />
-                                      </button>
-                                   </Link>
-                                   <button className="p-2 hover:bg-red-50 rounded-xl text-gray-400 hover:text-red-500 transition-all" title="Delete">
+                                   <button onClick={() => openDepartmentEditor(dept)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-primary transition-all" title="Manage Department">
+                                      <Settings className="h-4 w-4" />
+                                   </button>
+                                   <button onClick={() => setDeletingDepartmentId(dept.id)} className={`p-2 rounded-xl transition-all ${assignedEmployees.length > 0 ? "text-gray-300 hover:bg-gray-50" : "text-gray-400 hover:bg-red-50 hover:text-red-500"}`} title={assignedEmployees.length > 0 ? "Reassign employees before deleting" : "Delete"}>
                                       <X className="h-4 w-4" />
                                    </button>
                                 </div>
                              </td>
                           </tr>
-                       ))
+                       );
+                       })
                     ) : !loading && (
                        <tr>
                           <td colSpan={4} className="px-8 py-24 text-center">
@@ -148,6 +225,43 @@ export default function TeamsPage() {
            </div>
         </Card>
       </div>
+
+      <Modal isOpen={!!editingDepartment} onClose={() => setEditingDepartment(null)} title="Edit Department" size="sm">
+        <form onSubmit={handleUpdateDepartment} className="space-y-4">
+          <input required value={departmentForm.name} onChange={(event) => setDepartmentForm({ name: event.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" placeholder="Department name" />
+          <div className="flex gap-3 pt-3">
+            <Button type="button" onClick={() => setEditingDepartment(null)} className="flex-1 bg-gray-100 text-gray-600 border-none h-11 text-[10px] font-black uppercase tracking-widest">Cancel</Button>
+            <Button type="submit" className="flex-1 bg-primary text-white h-11 text-[10px] font-black uppercase tracking-widest"><Save className="h-4 w-4 mr-2" /> Save</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={!!deletingDepartmentId} onClose={() => setDeletingDepartmentId(null)} title="Delete Department" size="sm">
+        <div className="text-center py-4">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <p className="mb-7 text-xs font-medium text-gray-500">
+            {(() => {
+              const department = departments.find((item) => String(item.id) === String(deletingDepartmentId));
+              const assignedCount = department ? getAssignedEmployees(department).length : 0;
+              return assignedCount > 0
+                ? `${assignedCount} employee(s) are still assigned. Reassign them before deleting.`
+                : "This removes the department from the directory.";
+            })()}
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => setDeletingDepartmentId(null)} className="flex-1 bg-gray-100 text-gray-600 border-none h-11 text-[10px] font-black uppercase tracking-widest">Cancel</Button>
+            <Button
+              onClick={handleDeleteDepartment}
+              disabled={Boolean(departments.find((item) => String(item.id) === String(deletingDepartmentId)) && getAssignedEmployees(departments.find((item) => String(item.id) === String(deletingDepartmentId))).length > 0)}
+              className="flex-1 bg-red-500 text-white h-11 text-[10px] font-black uppercase tracking-widest"
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

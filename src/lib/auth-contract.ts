@@ -4,7 +4,7 @@ export type PermissionAction = "view" | "create" | "edit" | "delete" | "approve"
 
 export type PermissionKey =
   | "*"
-  | `${"company" | "settings" | "roles" | "employees" | "clients" | "hr" | "attendance" | "leaves" | "projects" | "tasks" | "finance" | "payroll" | "tickets" | "recruitment" | "reports" | "messages" | "events" | "notices" | "profile"}.${PermissionAction | "*"}`;
+  | `${"company" | "settings" | "roles" | "employees" | "clients" | "hr" | "shifts" | "attendance" | "leaves" | "projects" | "tasks" | "finance" | "payroll" | "tickets" | "recruitment" | "reports" | "messages" | "events" | "notices" | "profile"}.${PermissionAction | "*"}`;
 
 export type AuthUser = {
   id: number | string;
@@ -77,6 +77,7 @@ export const rolePermissions: Record<UserRole, PermissionKey[]> = {
     "employees.*",
     "clients.*",
     "hr.*",
+    "shifts.*",
     "attendance.*",
     "leaves.*",
     "projects.*",
@@ -95,7 +96,9 @@ export const rolePermissions: Record<UserRole, PermissionKey[]> = {
     "profile.*",
     "attendance.view",
     "attendance.create",
-    "leaves.*",
+    "leaves.view",
+    "leaves.create",
+    "leaves.delete",
     "projects.view",
     "tasks.*",
     "tickets.*",
@@ -130,7 +133,7 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/member"],
-    roles: ["admin", "employee"],
+    roles: ["employee"],
   },
   {
     prefixes: ["/settings", "/account-setup", "/module-settings", "/role-permission", "/custom-fields"],
@@ -145,7 +148,19 @@ export const roleRouteRules: RoleRouteRule[] = [
     roles: ["admin"],
   },
   {
-    prefixes: ["/attendance", "/leaves", "/holidays", "/leave-type"],
+    prefixes: ["/leaves/all", "/leaves/settings", "/leave-type"],
+    roles: ["admin"],
+  },
+  {
+    prefixes: ["/attendance/bulk"],
+    roles: ["admin"],
+  },
+  {
+    prefixes: ["/holidays/create"],
+    roles: ["admin"],
+  },
+  {
+    prefixes: ["/attendance", "/leaves", "/holidays"],
     roles: ["admin", "employee"],
   },
   {
@@ -154,11 +169,11 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/dashboard/client"],
-    roles: ["admin", "client"],
+    roles: ["client"],
   },
   {
     prefixes: ["/dashboard/hr", "/dashboard/finance", "/dashboard/project", "/dashboard/ticket"],
-    roles: ["admin", "employee", "client"],
+    roles: ["admin"],
   },
   {
     prefixes: ["/invoices", "/estimates", "/proposals", "/credit-notes", "/payments", "/expenses", "/invoice-recurring", "/expenses-recurring"],
@@ -235,9 +250,15 @@ export const makeDevUserFromEmail = (email: string): AuthUser => {
       : normalizedEmail.includes("client")
         ? "client"
         : "admin";
+  const idByRole: Record<UserRole, number | string> = {
+    super_admin: "platform-1",
+    admin: 1,
+    employee: 2,
+    client: 1,
+  };
 
   return {
-    id: role === "super_admin" ? "platform-1" : `${role}-1`,
+    id: idByRole[role],
     name: roleDefinitions[role].label,
     email,
     role,

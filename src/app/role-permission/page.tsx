@@ -24,6 +24,7 @@ const permissionModules: PermissionModule[] = [
   { key: "employees", label: "Employees", actions: ["view", "create", "edit", "delete", "export"] },
   { key: "clients", label: "Clients", actions: ["view", "create", "edit", "delete", "export"] },
   { key: "hr", label: "HR Settings", actions: ["view", "create", "edit", "delete", "manage"] },
+  { key: "shifts", label: "Shift Types", actions: ["view", "create", "edit", "delete", "manage"] },
   { key: "attendance", label: "Attendance", actions: ["view", "create", "edit", "approve", "export"] },
   { key: "leaves", label: "Leaves", actions: ["view", "create", "edit", "approve", "delete"] },
   { key: "projects", label: "Projects", actions: ["view", "create", "edit", "delete", "export"] },

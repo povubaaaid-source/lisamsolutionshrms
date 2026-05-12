@@ -2,7 +2,7 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, RefreshCw, Edit, Trash2, Eye, CheckCircle2, Circle, AlertTriangle } from "lucide-react";
+import { Plus, RefreshCw, Edit, Trash2, Eye, CheckCircle2, Circle, AlertTriangle, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -25,6 +25,7 @@ export default function TasksPage() {
   const { showToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
@@ -53,9 +54,19 @@ export default function TasksPage() {
   }, []);
 
   const filteredTasks = tasks.filter(t => {
+    const query = searchTerm.trim().toLowerCase();
+    const searchText = [
+      t.heading,
+      t.description,
+      t.status,
+      t.priority,
+      t.project?.project_name,
+      ...(t.users || []).map((user) => user.name),
+    ].filter(Boolean).join(" ").toLowerCase();
+    const searchMatch = !query || searchText.includes(query);
     const statusMatch = statusFilter === "All" || t.status.toLowerCase() === statusFilter.toLowerCase();
     const priorityMatch = priorityFilter === "All" || t.priority.toLowerCase() === priorityFilter.toLowerCase();
-    return statusMatch && priorityMatch;
+    return searchMatch && statusMatch && priorityMatch;
   });
 
   const handleToggleStatus = async (id: number | string, currentStatus: string) => {
@@ -90,6 +101,7 @@ export default function TasksPage() {
   };
 
   const handleReset = () => {
+    setSearchTerm("");
     setStatusFilter("All");
     setPriorityFilter("All");
   };
@@ -120,6 +132,19 @@ export default function TasksPage() {
         {/* Filters */}
         <Card className="p-5 border-none shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            <div className="lg:col-span-2">
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="w-full rounded-lg border border-gray-100 bg-white py-2 pl-9 pr-3 text-xs font-bold outline-none transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  placeholder="Search task, project, assignee"
+                  type="search"
+                />
+              </div>
+            </div>
             <div>
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Status</label>
               <select 
@@ -146,8 +171,7 @@ export default function TasksPage() {
                 <option value="low">Low</option>
               </select>
             </div>
-            <div className="lg:col-span-1"></div>
-            <div className="flex items-center space-x-2 md:col-span-2 lg:col-span-2 justify-end">
+            <div className="flex items-center justify-end">
               <button 
                 onClick={handleReset}
                 className="flex items-center space-x-1 rounded-lg border border-gray-200 px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-50 transition-all"

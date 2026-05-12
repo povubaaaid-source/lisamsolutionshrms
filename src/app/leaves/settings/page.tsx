@@ -21,6 +21,14 @@ import Card from "@/components/ui/Card";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 
+const leaveColorClasses: Record<string, string> = {
+  info: "bg-blue-500 shadow-blue-500/50",
+  success: "bg-green-500 shadow-green-500/50",
+  warning: "bg-yellow-500 shadow-yellow-500/50",
+  danger: "bg-red-500 shadow-red-500/50",
+  purple: "bg-purple-500 shadow-purple-500/50",
+};
+
 export default function LeaveSettingsPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -61,15 +69,28 @@ export default function LeaveSettingsPage() {
     fetchData();
   }, []);
 
-  const handleUpdateType = async (id: number, count: number, paid: number) => {
+  const updateLeaveTypeField = (id: number | string, patch: Record<string, string | number>) => {
+    setLeaveTypes((current) => current.map((type) => type.id === id ? { ...type, ...patch } : type));
+  };
+
+  const handleUpdateType = async (id: number | string) => {
+    const leaveType = leaveTypes.find((type) => type.id === id);
+    if (!leaveType) return;
+    const count = Number(leaveType.no_of_leaves || 0);
+    const paid = Number(leaveType.paid ?? 1);
+    if (!Number.isFinite(count) || count < 0) {
+      showToast("Leave limit must be zero or greater.", "error");
+      return;
+    }
+
     setSaving(true);
     try {
       await api.put(`/leaveType/${id}`, { 
+        leaves: count,
         no_of_leaves: count,
         paid: paid
       });
       showToast("Leave type updated successfully", "success");
-      fetchData();
     } catch (err) {
       showToast("Update failed", "error");
     } finally {
@@ -264,7 +285,7 @@ export default function LeaveSettingsPage() {
                              <tr key={type.id} className="hover:bg-gray-50/30 transition-all group">
                                 <td className="px-6 py-5">
                                    <div className="flex items-center space-x-3">
-                                      <div className={`h-2 w-2 rounded-full bg-${type.color}-500 shadow-sm shadow-${type.color}-500/50`}></div>
+                                      <div className={`h-2 w-2 rounded-full shadow-sm ${leaveColorClasses[type.color] || leaveColorClasses.info}`}></div>
                                       <span className="text-[11px] font-black text-gray-800 uppercase tracking-tight">{type.type_name}</span>
                                    </div>
                                 </td>
@@ -272,21 +293,26 @@ export default function LeaveSettingsPage() {
                                    <div className="relative w-24">
                                       <input 
                                         type="number" 
-                                        defaultValue={type.no_of_leaves}
+                                        value={type.no_of_leaves ?? ""}
+                                        onChange={(event) => updateLeaveTypeField(type.id, { no_of_leaves: event.target.value })}
                                         className="w-full bg-white border border-gray-100 rounded-lg py-1.5 px-3 text-[10px] font-black text-gray-600 focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
                                       />
                                    </div>
                                 </td>
                                 <td className="px-6 py-5">
-                                   <select className="bg-white border border-gray-100 rounded-lg py-1.5 px-3 text-[9px] font-black text-gray-500 uppercase tracking-widest outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer">
-                                      <option selected={type.paid === 1} value="1">PAID</option>
-                                      <option selected={type.paid === 0} value="0">UNPAID</option>
+                                   <select
+                                     value={String(type.paid ?? 1)}
+                                     onChange={(event) => updateLeaveTypeField(type.id, { paid: Number(event.target.value) })}
+                                     className="bg-white border border-gray-100 rounded-lg py-1.5 px-3 text-[9px] font-black text-gray-500 uppercase tracking-widest outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
+                                   >
+                                      <option value="1">PAID</option>
+                                      <option value="0">UNPAID</option>
                                    </select>
                                 </td>
                                 <td className="px-6 py-5">
                                    <div className="flex items-center justify-center space-x-2">
                                       <button 
-                                        onClick={() => handleUpdateType(type.id, 1, 1)}
+                                        onClick={() => handleUpdateType(type.id)}
                                         className="p-2 bg-green-50 text-green-500 rounded-xl hover:bg-green-500 hover:text-white transition-all shadow-sm"
                                         title="Update"
                                       >

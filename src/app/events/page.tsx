@@ -4,29 +4,130 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { 
-  Plus, 
-  Filter, 
-  RefreshCw, 
-  Calendar as CalendarIcon, 
-  ChevronLeft, 
-  ChevronRight,
-  Users,
+import Modal from "@/components/ui/Modal";
+import {
   Briefcase,
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Eye,
   Layers,
   MapPin,
-  Clock,
-  MoreHorizontal
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
+import { useToast } from "@/context/ToastContext";
+
+type EventItem = {
+  id: number;
+  title: string;
+  date: string;
+  time: string;
+  employee: string;
+  client: string;
+  category: string;
+  location: string;
+  color: string;
+};
+
+const initialEvents: EventItem[] = [
+  { id: 1, title: "Product Launch", date: "2026-05-04", time: "09:00 AM", employee: "John Doe", client: "Acme Corp", category: "Milestone", location: "Office", color: "primary" },
+  { id: 2, title: "Team Review", date: "2026-05-04", time: "02:00 PM", employee: "Jane Smith", client: "Internal", category: "Meeting", location: "Conference Room", color: "blue" },
+  { id: 3, title: "Client Meeting", date: "2026-05-12", time: "11:00 AM", employee: "John Doe", client: "Globex Corp", category: "Client", location: "Zoom", color: "purple" },
+  { id: 4, title: "Company Holiday", date: "2026-05-18", time: "All Day", employee: "All Employees", client: "Internal", category: "Holiday", location: "Company-wide", color: "green" },
+];
+
+const blankEvent = {
+  title: "",
+  date: "2026-05-12",
+  time: "09:00 AM",
+  employee: "All Employees",
+  client: "Internal",
+  category: "Meeting",
+  location: "",
+};
+
+const pad = (value: number) => String(value).padStart(2, "0");
+const toDateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+const colorClasses: Record<string, string> = {
+  primary: "bg-primary/10 border-primary text-primary",
+  blue: "bg-blue-500/10 border-blue-500 text-blue-600",
+  purple: "bg-purple-500/10 border-purple-500 text-purple-600",
+  green: "bg-green-500/10 border-green-500 text-green-600",
+};
 
 export default function EventsPage() {
-  const [currentMonth, setCurrentMonth] = useState("May 2026");
-  
+  const { showToast } = useToast();
+  const [events, setEvents] = useState(initialEvents);
+  const [currentDate, setCurrentDate] = useState(new Date("2026-05-01"));
+  const [view, setView] = useState<"Month" | "Week" | "Day" | "List">("Month");
+  const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
+  const [eventForm, setEventForm] = useState(blankEvent);
+
+  const currentMonth = currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const employees = Array.from(new Set(events.map((event) => event.employee)));
+  const clients = Array.from(new Set(events.map((event) => event.client)));
+  const categories = Array.from(new Set(events.map((event) => event.category)));
+
+  const filteredEvents = events.filter((event) => {
+    const matchesEmployee = employeeFilter === "all" || event.employee === employeeFilter;
+    const matchesClient = clientFilter === "all" || event.client === clientFilter;
+    const matchesCategory = categoryFilter === "all" || event.category === categoryFilter;
+    return matchesEmployee && matchesClient && matchesCategory;
+  });
+
+  const monthEvents = filteredEvents.filter((event) => {
+    const eventDate = new Date(`${event.date}T00:00:00`);
+    return eventDate.getFullYear() === currentDate.getFullYear() && eventDate.getMonth() === currentDate.getMonth();
+  });
+
+  const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+  const leadingEmptyDays = monthStart.getDay();
+
+  const shiftMonth = (amount: number) => {
+    setCurrentDate((date) => new Date(date.getFullYear(), date.getMonth() + amount, 1));
+  };
+
+  const resetFilters = () => {
+    setEmployeeFilter("all");
+    setClientFilter("all");
+    setCategoryFilter("all");
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setEvents((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        ...eventForm,
+        color: eventForm.category === "Holiday" ? "green" : eventForm.category === "Client" ? "purple" : eventForm.category === "Milestone" ? "primary" : "blue",
+      },
+    ]);
+    setIsEditorOpen(false);
+    showToast("Event created locally. PHP endpoint should persist the event payload.", "success");
+  };
+
+  const deleteEvent = (id: number) => {
+    setEvents((prev) => prev.filter((event) => event.id !== id));
+    setViewingEvent(null);
+    showToast("Event deleted locally. PHP endpoint should persist deletion.", "success");
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header Parity */}
         <div className="flex flex-wrap items-center justify-between bg-white px-6 py-4 shadow-sm -mx-6 -mt-6 mb-6 gap-4 border-b border-gray-50">
           <div>
             <h1 className="text-base font-black text-gray-800 uppercase tracking-widest flex items-center">
@@ -36,141 +137,175 @@ export default function EventsPage() {
             <p className="text-[10px] text-gray-400 font-bold mt-0.5 tracking-wider">Home / Events / Calendar View</p>
           </div>
           <div className="flex items-center space-x-3">
-            <button className="p-2.5 bg-gray-50 text-gray-400 hover:text-primary rounded-xl transition-all">
+            <button onClick={() => showToast(`${monthEvents.length} events loaded for ${currentMonth}.`, "success")} className="p-2.5 bg-gray-50 text-gray-400 hover:text-primary rounded-xl transition-all">
               <RefreshCw className="h-4 w-4" />
             </button>
-            <Button className="bg-primary text-white text-[10px] font-black px-6 h-10 uppercase tracking-widest shadow-lg shadow-primary/20">
-               <Plus className="h-4 w-4 mr-2" /> Add Event
+            <Button onClick={() => setIsEditorOpen(true)} className="bg-primary text-white text-[10px] font-black px-6 h-10 uppercase tracking-widest shadow-lg shadow-primary/20">
+              <Plus className="h-4 w-4 mr-2" /> Add Event
             </Button>
           </div>
         </div>
 
-        {/* Filters Section Parity */}
         <Card className="border-none shadow-sm p-6 bg-white mb-6">
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div>
-                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Employees</label>
-                 <div className="relative">
-                    <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                    <select className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
-                       <option value="all">All Employees</option>
-                    </select>
-                 </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Employees</label>
+              <div className="relative">
+                <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                <select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} className="w-full bg-gray-50/50 border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
+                  <option value="all">All Employees</option>
+                  {employees.map((employee) => <option key={employee}>{employee}</option>)}
+                </select>
               </div>
-              <div>
-                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Client</label>
-                 <div className="relative">
-                    <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                    <select className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
-                       <option value="all">All Clients</option>
-                    </select>
-                 </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Client</label>
+              <div className="relative">
+                <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className="w-full bg-gray-50/50 border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
+                  <option value="all">All Clients</option>
+                  {clients.map((client) => <option key={client}>{client}</option>)}
+                </select>
               </div>
-              <div>
-                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Event Category</label>
-                 <div className="relative">
-                    <Layers className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                    <select className="w-full bg-gray-50/50 border-none rounded-xl py-3 pl-11 pr-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
-                       <option value="all">All Categories</option>
-                    </select>
-                 </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Event Category</label>
+              <div className="relative">
+                <Layers className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="w-full bg-gray-50/50 border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer">
+                  <option value="all">All Categories</option>
+                  {categories.map((category) => <option key={category}>{category}</option>)}
+                </select>
               </div>
-              <div className="flex items-end space-x-2">
-                 <Button className="flex-1 bg-primary text-white text-[10px] font-black h-11 uppercase tracking-widest">
-                    Apply
-                 </Button>
-                 <Button className="flex-1 bg-gray-100 text-gray-500 border-none h-11 text-[10px] font-black uppercase tracking-widest">
-                    Reset
-                 </Button>
-              </div>
-           </div>
+            </div>
+            <div className="flex items-end space-x-2">
+              <Button onClick={() => showToast(`${filteredEvents.length} events match these filters.`, "success")} className="flex-1 bg-primary text-white text-[10px] font-black h-11 uppercase tracking-widest">Apply</Button>
+              <Button onClick={resetFilters} className="flex-1 bg-gray-100 text-gray-500 border-none h-11 text-[10px] font-black uppercase tracking-widest">Reset</Button>
+            </div>
+          </div>
         </Card>
 
-        {/* Calendar UI */}
         <Card className="border-none shadow-sm bg-white overflow-hidden p-0">
           <div className="p-8 border-b border-gray-50 flex flex-wrap items-center justify-between gap-6">
             <div className="flex items-center space-x-6">
-               <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter">
-                 {currentMonth}
-               </h2>
-               <div className="flex bg-gray-50 p-1 rounded-xl">
-                  <button className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-400 hover:text-primary"><ChevronLeft className="h-4 w-4" /></button>
-                  <button className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-400 hover:text-primary"><ChevronRight className="h-4 w-4" /></button>
-               </div>
+              <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter">{currentMonth}</h2>
+              <div className="flex bg-gray-50 p-1 rounded-xl">
+                <button onClick={() => shiftMonth(-1)} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-400 hover:text-primary"><ChevronLeft className="h-4 w-4" /></button>
+                <button onClick={() => shiftMonth(1)} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-400 hover:text-primary"><ChevronRight className="h-4 w-4" /></button>
+              </div>
             </div>
-            
+
             <div className="flex items-center space-x-4">
-              <button className="px-5 py-2.5 rounded-xl bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-primary hover:bg-primary/5 transition-all">Today</button>
+              <button onClick={() => setCurrentDate(new Date())} className="px-5 py-2.5 rounded-xl bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-primary hover:bg-primary/5 transition-all">Today</button>
               <div className="flex bg-gray-50 p-1 rounded-xl shadow-inner border border-gray-100/50">
-                {['Month', 'Week', 'Day', 'List'].map(view => (
-                   <button 
-                     key={view} 
-                     className={`px-5 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${view === 'Month' ? 'bg-white text-primary shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-                   >
-                      {view}
-                   </button>
+                {(["Month", "Week", "Day", "List"] as const).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => setView(option)}
+                    className={`px-5 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${view === option ? "bg-white text-primary shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                  >
+                    {option}
+                  </button>
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-7">
-            {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
-              <div key={day} className="py-4 bg-gray-50/30 border-b border-r border-gray-50 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                {day}
-              </div>
-            ))}
-            {/* Calendar Grid */}
-            {Array.from({ length: 31 }).map((_, i) => {
-              const day = i + 1;
-              const hasEvents = day === 4 || day === 12 || day === 18;
-              return (
-                <div key={day} className={`group relative p-3 border-r border-b border-gray-50 min-h-[140px] transition-colors hover:bg-gray-50/50 ${day === 4 ? 'bg-primary/[0.02]' : ''}`}>
-                   <span className={`text-[11px] font-black ${day === 4 ? 'text-primary' : 'text-gray-300 group-hover:text-gray-500'} transition-colors`}>
-                      {day < 10 ? `0${day}` : day}
-                   </span>
-                   
-                   {day === 4 && (
-                     <div className="mt-3 space-y-2">
-                        <div className="bg-primary/10 border-l-2 border-primary p-2 rounded-r-lg">
-                           <p className="text-[9px] font-black text-primary uppercase leading-tight truncate">Product Launch</p>
-                           <div className="flex items-center text-[7px] font-bold text-primary/60 mt-1 uppercase">
-                              <Clock className="h-2 w-2 mr-1" /> 09:00 AM
-                           </div>
-                        </div>
-                        <div className="bg-blue-500/10 border-l-2 border-blue-500 p-2 rounded-r-lg">
-                           <p className="text-[9px] font-black text-blue-600 uppercase leading-tight truncate">Team Review</p>
-                        </div>
-                     </div>
-                   )}
-
-                   {day === 12 && (
-                     <div className="mt-3">
-                        <div className="bg-purple-500/10 border-l-2 border-purple-500 p-2 rounded-r-lg">
-                           <p className="text-[9px] font-black text-purple-600 uppercase leading-tight truncate">Client Meeting</p>
-                           <div className="flex items-center text-[7px] font-bold text-purple/60 mt-1 uppercase">
-                              <MapPin className="h-2 w-2 mr-1" /> Zoom
-                           </div>
-                        </div>
-                     </div>
-                   )}
-
-                   {day === 18 && (
-                     <div className="mt-3">
-                        <div className="bg-green-500/10 border-l-2 border-green-500 p-2 rounded-r-lg">
-                           <p className="text-[9px] font-black text-green-600 uppercase leading-tight truncate">Company Holiday</p>
-                        </div>
-                     </div>
-                   )}
+          {view === "Month" ? (
+            <div className="grid grid-cols-7">
+              {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => (
+                <div key={day} className="py-4 bg-gray-50/30 border-b border-r border-gray-50 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                  {day}
                 </div>
-              );
-            })}
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={`empty-${i}`} className="p-3 border-r border-b border-gray-50 min-h-[140px] bg-gray-50/20"></div>
-            ))}
-          </div>
+              ))}
+              {Array.from({ length: leadingEmptyDays }).map((_, index) => (
+                <div key={`empty-start-${index}`} className="p-3 border-r border-b border-gray-50 min-h-[140px] bg-gray-50/20" />
+              ))}
+              {Array.from({ length: daysInMonth }).map((_, index) => {
+                const day = index + 1;
+                const dateKey = `${currentDate.getFullYear()}-${pad(currentDate.getMonth() + 1)}-${pad(day)}`;
+                const eventsForDay = monthEvents.filter((event) => event.date === dateKey);
+
+                return (
+                  <div key={dateKey} className="group relative p-3 border-r border-b border-gray-50 min-h-[140px] transition-colors hover:bg-gray-50/50">
+                    <span className="text-[11px] font-black text-gray-300 group-hover:text-gray-500 transition-colors">{pad(day)}</span>
+                    <div className="mt-3 space-y-2">
+                      {eventsForDay.map((event) => (
+                        <button
+                          key={event.id}
+                          onClick={() => setViewingEvent(event)}
+                          className={`w-full rounded-r-lg border-l-2 p-2 text-left ${colorClasses[event.color] || colorClasses.blue}`}
+                        >
+                          <p className="text-[9px] font-black uppercase leading-tight truncate">{event.title}</p>
+                          <div className="flex items-center text-[7px] font-bold mt-1 uppercase opacity-70">
+                            <Clock className="h-2 w-2 mr-1" /> {event.time}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {monthEvents.map((event) => (
+                <button key={event.id} onClick={() => setViewingEvent(event)} className="flex w-full items-center justify-between p-5 text-left hover:bg-gray-50">
+                  <div>
+                    <div className="text-sm font-black text-gray-800">{event.title}</div>
+                    <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">{event.date} at {event.time}</div>
+                  </div>
+                  <Eye className="h-4 w-4 text-gray-400" />
+                </button>
+              ))}
+              {monthEvents.length === 0 && (
+                <div className="py-20 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">No events match the current view</div>
+              )}
+            </div>
+          )}
         </Card>
       </div>
+
+      <Modal isOpen={isEditorOpen} onClose={() => setIsEditorOpen(false)} title="Add Event" size="md">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input required value={eventForm.title} onChange={(event) => setEventForm((prev) => ({ ...prev, title: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" placeholder="Event title" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input required type="date" value={eventForm.date} onChange={(event) => setEventForm((prev) => ({ ...prev, date: event.target.value }))} className="rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" />
+            <input required value={eventForm.time} onChange={(event) => setEventForm((prev) => ({ ...prev, time: event.target.value }))} className="rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" placeholder="09:00 AM" />
+            <input required value={eventForm.employee} onChange={(event) => setEventForm((prev) => ({ ...prev, employee: event.target.value }))} className="rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" placeholder="Employee" />
+            <input required value={eventForm.client} onChange={(event) => setEventForm((prev) => ({ ...prev, client: event.target.value }))} className="rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" placeholder="Client" />
+            <select value={eventForm.category} onChange={(event) => setEventForm((prev) => ({ ...prev, category: event.target.value }))} className="rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold">
+              <option>Meeting</option>
+              <option>Client</option>
+              <option>Holiday</option>
+              <option>Milestone</option>
+            </select>
+            <input value={eventForm.location} onChange={(event) => setEventForm((prev) => ({ ...prev, location: event.target.value }))} className="rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" placeholder="Location" />
+          </div>
+          <div className="flex gap-3 pt-4">
+            <Button type="button" onClick={() => setIsEditorOpen(false)} className="flex-1 bg-gray-100 text-gray-600 border-none h-11 text-[10px] font-black uppercase tracking-widest">Cancel</Button>
+            <Button type="submit" className="flex-1 bg-primary text-white h-11 text-[10px] font-black uppercase tracking-widest"><Save className="h-4 w-4 mr-2" /> Save Event</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={!!viewingEvent} onClose={() => setViewingEvent(null)} title="Event Details" size="md">
+        {viewingEvent && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="rounded border border-gray-100 bg-gray-50 p-3"><div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Event</div><div className="mt-1 font-bold text-gray-700">{viewingEvent.title}</div></div>
+              <div className="rounded border border-gray-100 bg-gray-50 p-3"><div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Date</div><div className="mt-1 font-bold text-gray-700">{viewingEvent.date}</div></div>
+              <div className="rounded border border-gray-100 bg-gray-50 p-3"><div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Time</div><div className="mt-1 font-bold text-gray-700">{viewingEvent.time}</div></div>
+              <div className="rounded border border-gray-100 bg-gray-50 p-3"><div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Owner</div><div className="mt-1 font-bold text-gray-700">{viewingEvent.employee}</div></div>
+              <div className="rounded border border-gray-100 bg-gray-50 p-3"><div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Client</div><div className="mt-1 font-bold text-gray-700">{viewingEvent.client}</div></div>
+              <div className="rounded border border-gray-100 bg-gray-50 p-3"><div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Location</div><div className="mt-1 font-bold text-gray-700"><MapPin className="mr-1 inline h-3 w-3" />{viewingEvent.location}</div></div>
+            </div>
+            <Button onClick={() => deleteEvent(viewingEvent.id)} className="w-full bg-red-500 text-white h-11 text-[10px] font-black uppercase tracking-widest">
+              <Trash2 className="h-4 w-4 mr-2" /> Delete Event
+            </Button>
+          </div>
+        )}
+      </Modal>
     </DashboardLayout>
   );
 }
