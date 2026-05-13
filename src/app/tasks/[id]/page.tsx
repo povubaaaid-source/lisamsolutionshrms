@@ -33,6 +33,7 @@ import Card from "@/components/ui/Card";
 import api from "@/lib/api";
 import { Task } from "@/types";
 import { useToast } from "@/context/ToastContext";
+import { formatDuration } from "@/lib/hr-utils";
 
 type LooseRecord = {
   id?: number | string;
@@ -183,13 +184,6 @@ const getPriorityColor = (priority?: string) => {
   }
 };
 
-const formatMinutes = (minutes?: number | string) => {
-  const totalMinutes = Number(minutes || 0);
-  const hours = Math.floor(totalMinutes / 60);
-  const remainingMinutes = totalMinutes % 60;
-  if (!hours && !remainingMinutes) return "0 mins";
-  return `${hours ? `${hours} hrs` : ""}${hours && remainingMinutes ? " " : ""}${remainingMinutes ? `${remainingMinutes} mins` : ""}`;
-};
 
 const getRecordKey = (record: LooseRecord, fallback: string) => String(record.id || record.title || record.name || record.created_at || fallback);
 
@@ -440,14 +434,14 @@ export default function TaskDetailPage() {
 
             {activeTab === "timelogs" && (
               <AdminDataTable
-                title={`Time Logs / ${formatMinutes(totalLoggedMinutes)}`}
+                title={`Time Logs / ${formatDuration(totalLoggedMinutes)}`}
                 records={collections.timeLogs}
                 getRecordKey={(record, index) => getRecordKey(record, `time-log-${index}`)}
                 columns={[
                   { header: "Employee", accessor: (record) => record.employee?.name || record.user?.name || record.name || "N/A" },
                   { header: "Start", accessor: (record) => record.start_time || record.started_at || "N/A" },
                   { header: "End", accessor: (record) => record.end_time || record.ended_at || "Running" },
-                  { header: "Time", accessor: (record) => formatMinutes(record.total_minutes || record.minutes) },
+                  { header: "Time", accessor: (record) => formatDuration(Number(record.total_minutes || record.minutes)) },
                   { header: "Memo", accessor: (record) => record.memo || record.note || "N/A" },
                 ]}
               />

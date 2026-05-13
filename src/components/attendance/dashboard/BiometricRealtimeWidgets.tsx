@@ -12,8 +12,11 @@ export default function BiometricRealtimeWidgets() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    devicesService.listDevices().then(data => {
-      setDevices(data);
+    devicesService.listDevices().then(response => {
+      setDevices(response.data || []);
+      setLoading(false);
+    }).catch(() => {
+      setDevices([]);
       setLoading(false);
     });
   }, []);
