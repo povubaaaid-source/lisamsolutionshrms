@@ -5,7 +5,7 @@ import LiveScanCard from "@/components/attendance/live/LiveScanCard";
 import { Activity, Radio, PlayCircle, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useState, useCallback } from "react";
-import { AttendanceScanEvent, useAttendanceEvents, simulateScan } from "@/lib/realtime/attendance-events";
+import { AttendanceScanEvent, useAttendanceScanListener, simulateScan } from "@/lib/realtime/attendance-events";
 
 export default function LiveAttendanceFeed() {
   const [events, setEvents] = useState<AttendanceScanEvent[]>([]);
@@ -16,7 +16,7 @@ export default function LiveAttendanceFeed() {
     setEvents(prev => [event, ...prev].slice(0, 50)); // Keep last 50
   }, [isLive]);
 
-  useAttendanceEvents(handleNewScan);
+  useAttendanceScanListener(handleNewScan);
 
   const clearFeed = () => setEvents([]);
 
@@ -62,13 +62,13 @@ export default function LiveAttendanceFeed() {
           </div>
           <div className="white-box p-6 border-l-4 border-success">
             <div className="text-3xl font-black text-success">
-               {events.filter(e => e.type === 'IN').length}
+               {events.filter(e => e.type === 'check_in').length}
             </div>
             <div className="text-[10px] text-gray-400 uppercase font-black tracking-widest mt-1">Total Clock-In</div>
           </div>
           <div className="white-box p-6 border-l-4 border-warning">
             <div className="text-3xl font-black text-warning">
-               {events.filter(e => e.type === 'OUT').length}
+               {events.filter(e => e.type === 'check_out').length}
             </div>
             <div className="text-[10px] text-gray-400 uppercase font-black tracking-widest mt-1">Total Clock-Out</div>
           </div>

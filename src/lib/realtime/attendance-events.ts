@@ -1,24 +1,47 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import socket from "./socket";
 
 export type AttendanceScanEvent = {
-  employee_id: string | number;
-  employee_name: string;
-  employee_image?: string;
-  device_name: string;
+  employeeId: string | number;
+  employeeName: string;
+  employeeImage?: string;
+  deviceLocation: string;
   timestamp: string;
-  type: "IN" | "OUT";
+  type: "check_in" | "check_out";
 };
 
 export type DeviceStatusEvent = {
-  device_id: string | number;
+  deviceId: string | number;
   status: "online" | "offline";
 };
 
 /**
- * Hook to listen for live attendance scans
+ * Hook to listen for live attendance scans (Stateful version)
  */
-export function useAttendanceEvents(onScan: (event: AttendanceScanEvent) => void) {
+export function useAttendanceEvents() {
+  const [latestScan, setLatestScan] = useState<AttendanceScanEvent | null>(null);
+  const [sessionStats, setSessionStats] = useState({ clockIns: 0, clockOuts: 0 });
+
+  useEffect(() => {
+    const handler = (event: AttendanceScanEvent) => {
+      setLatestScan(event);
+      setSessionStats(prev => ({
+        clockIns: prev.clockIns + (event.type === 'check_in' ? 1 : 0),
+        clockOuts: prev.clockOuts + (event.type === 'check_out' ? 1 : 0),
+      }));
+    };
+
+    socket.on("attendance.scanned", handler);
+    return () => socket.off("attendance.scanned", handler);
+  }, []);
+
+  return { latestScan, sessionStats };
+}
+
+/**
+ * Hook to listen for live attendance scans (Callback version)
+ */
+export function useAttendanceScanListener(onScan: (event: AttendanceScanEvent) => void) {
   useEffect(() => {
     socket.on("attendance.scanned", onScan);
     return () => socket.off("attendance.scanned", onScan);
@@ -43,10 +66,10 @@ export function simulateScan() {
   const randomName = names[Math.floor(Math.random() * names.length)];
   
   socket.simulate("attendance.scanned", {
-    employee_id: Math.floor(Math.random() * 1000),
-    employee_name: randomName,
-    device_name: "Front Gate (MB460)",
+    employeeId: Math.floor(Math.random() * 1000),
+    employeeName: randomName,
+    deviceLocation: "Main Entrance Gateway",
     timestamp: new Date().toISOString(),
-    type: Math.random() > 0.5 ? "IN" : "OUT"
+    type: Math.random() > 0.5 ? "check_in" : "check_out"
   });
 }
