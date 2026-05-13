@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, CreditCard, DollarSign, FileText, ShieldCheck, XCircle } from "lucide-react";
+import { formatCurrency } from "@/lib/payroll-utils";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import AdminFileManager from "@/components/admin/AdminFileManager";
 import Button from "@/components/ui/Button";
@@ -68,7 +69,7 @@ export default function PaymentDetailsPage() {
                 {([
                   { label: "Invoice", value: payment.invoice_number, Icon: FileText },
                   { label: "Project", value: payment.project, Icon: FileText },
-                  { label: "Amount", value: `$${payment.amount.toFixed(2)}`, Icon: DollarSign },
+                  { label: "Amount", value: formatCurrency(payment.amount), Icon: DollarSign },
                   { label: "Paid On", value: payment.paid_on, Icon: CreditCard },
                   { label: "Gateway", value: payment.gateway, Icon: CreditCard },
                   { label: "Transaction ID", value: payment.transaction_id, Icon: ShieldCheck },

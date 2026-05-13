@@ -14,7 +14,6 @@ import {
   MapPin, 
   Hash, 
   Phone, 
-  DollarSign, 
   Languages,
   CheckCircle2,
   Info,
@@ -363,25 +362,7 @@ export default function CreateEmployeePage() {
                     </div>
                  </div>
 
-                 <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Access Role</label>
-                    <div className="relative">
-                       <Shield className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
-                       <select 
-                         name="role"
-                         value={formData.role}
-                         onChange={handleInputChange}
-                         className="w-full bg-gray-50 border-none rounded-xl py-3.5 pl-12 pr-10 text-xs font-black uppercase tracking-tight outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer"
-                       >
-                          <option value="employee">Employee</option>
-                          <option value="admin">Company Admin</option>
-                       </select>
-                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300 pointer-events-none" />
-                    </div>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
-                      Company admins can manage this company&apos;s workspace.
-                    </p>
-                 </div>
+
 
                  <div className="space-y-2">
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Shift Type</label>
@@ -422,9 +403,9 @@ export default function CreateEmployeePage() {
                  </div>
 
                  <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Hourly Rate</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Basic Salary (PKR)</label>
                     <div className="relative">
-                       <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                       <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-[10px] text-primary">PKR</span>
                        <input 
                          name="hourly_rate"
                          type="number"

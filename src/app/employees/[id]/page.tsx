@@ -335,7 +335,7 @@ export default function EmployeeDetailPage() {
                     ["Gender", employee.gender || "Not specified"],
                     ["Mobile", employee.mobile || detail.mobile || "N/A"],
                     ["Slack Username", detail.slack_username ? `@${detail.slack_username}` : "N/A"],
-                    ["Hourly Rate", detail.hourly_rate ? `$${detail.hourly_rate}` : "N/A"],
+                    ["Basic Salary", detail.hourly_rate ? `PKR ${detail.hourly_rate}` : "N/A"],
                   ].map(([label, value]) => (
                     <div key={label}>
                       <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-gray-300">{label}</p>

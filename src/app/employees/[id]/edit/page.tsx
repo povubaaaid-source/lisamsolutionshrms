@@ -323,26 +323,7 @@ export default function EditEmployeePage() {
                  </div>
               </Card>
 
-              <Card title="Access & Role" className="border-none shadow-sm p-8 bg-white">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-1.5">
-                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">System Access Role</label>
-                       <div className="relative">
-                          <Shield className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-                          <select
-                             {...register("role")}
-                             className="w-full bg-gray-50 border-none rounded-xl p-3 pl-12 text-xs font-bold focus:ring-1 focus:ring-primary outline-none appearance-none cursor-pointer"
-                          >
-                             <option value="employee">Employee</option>
-                             <option value="admin">Company Admin</option>
-                          </select>
-                       </div>
-                       <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
-                         Company Admin grants access to company management modules. Employee keeps member portal access.
-                       </p>
-                    </div>
-                 </div>
-              </Card>
+
            </div>
 
            <div className="space-y-6">

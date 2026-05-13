@@ -87,7 +87,7 @@ export const toNumber = (value: unknown, fallback = 0) => {
 
 export const roundMoney = (value: unknown) => Math.round(toNumber(value) * 100) / 100;
 
-export const formatCurrency = (value: unknown, currency = "USD") =>
+export const formatCurrency = (value: unknown, currency = "PKR") =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,

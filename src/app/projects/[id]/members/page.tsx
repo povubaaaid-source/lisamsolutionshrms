@@ -15,7 +15,7 @@ export default function ProjectMembersPage() {
       ]}
       fields={[
         { name: "user_id", label: "Employee ID", type: "number", required: true, placeholder: "Employee user ID" },
-        { name: "hourly_rate", label: "Hourly Rate", type: "number", placeholder: "Optional billing rate" },
+        { name: "hourly_rate", label: "Basic Salary (PKR)", type: "number", placeholder: "Optional basic salary" },
       ]}
       createEndpoint="/project-member"
       updateEndpoint="/project-member/{id}"

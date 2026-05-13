@@ -5,6 +5,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import StableResponsiveContainer from "@/components/charts/StableResponsiveContainer";
 import { Filter, RefreshCw, DollarSign, Calendar, TrendingUp, TrendingDown, CreditCard, Download, Search, Briefcase, Users } from "lucide-react";
+import { formatCurrency } from "@/lib/payroll-utils";
 import Link from "next/link";
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
@@ -141,10 +142,10 @@ export default function FinanceReportPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           {[
-            { label: "Total Invoices", value: `$${financeTotals.invoice.toLocaleString()}`, icon: DollarSign, color: "text-blue-500", bg: "bg-blue-50" },
-            { label: "Total Paid", value: `$${financeTotals.paid.toLocaleString()}`, icon: TrendingUp, color: "text-green-500", bg: "bg-green-50" },
-            { label: "Total Unpaid", value: `$${financeTotals.unpaid.toLocaleString()}`, icon: TrendingDown, color: "text-red-500", bg: "bg-red-50" },
-            { label: "Total Partial", value: `$${financeTotals.partial.toLocaleString()}`, icon: CreditCard, color: "text-yellow-500", bg: "bg-yellow-50" },
+            { label: "Total Invoices", value: formatCurrency(financeTotals.invoice), icon: DollarSign, color: "text-blue-500", bg: "bg-blue-50" },
+            { label: "Total Paid", value: formatCurrency(financeTotals.paid), icon: TrendingUp, color: "text-green-500", bg: "bg-green-50" },
+            { label: "Total Unpaid", value: formatCurrency(financeTotals.unpaid), icon: TrendingDown, color: "text-red-500", bg: "bg-red-50" },
+            { label: "Total Partial", value: formatCurrency(financeTotals.partial), icon: CreditCard, color: "text-yellow-500", bg: "bg-yellow-50" },
           ].map((stat, i) => (
             <Card key={i} className="p-6 border-none shadow-sm bg-white flex items-center justify-between group hover:shadow-md transition-all">
               <div>

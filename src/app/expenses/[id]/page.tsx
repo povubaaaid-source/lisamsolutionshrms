@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, DollarSign, FileText, FolderOpen, Receipt, XCircle } from "lucide-react";
+import { formatCurrency } from "@/lib/payroll-utils";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import AdminFileManager from "@/components/admin/AdminFileManager";
 import Button from "@/components/ui/Button";
@@ -68,7 +69,7 @@ export default function ExpenseDetailsPage() {
                   { label: "Category", value: expense.category, Icon: FolderOpen },
                   { label: "Project", value: expense.project, Icon: FolderOpen },
                   { label: "Purchase Date", value: expense.purchase_date, Icon: FileText },
-                  { label: "Amount", value: `$${expense.price.toFixed(2)}`, Icon: DollarSign },
+                  { label: "Amount", value: formatCurrency(expense.price), Icon: DollarSign },
                 ] satisfies DetailField[]).map(({ label, value, Icon }) => (
                   <div key={label} className="rounded-2xl bg-gray-50 p-4">
                     <Icon className="mb-2 h-4 w-4 text-primary" />

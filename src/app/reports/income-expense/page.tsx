@@ -5,6 +5,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import StableResponsiveContainer from "@/components/charts/StableResponsiveContainer";
 import { Filter, RefreshCw, BarChart3, TrendingUp, TrendingDown, DollarSign, Calendar, Search, Download } from "lucide-react";
+import { formatCurrency } from "@/lib/payroll-utils";
 import Link from "next/link";
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
@@ -57,9 +58,9 @@ export default function IncomeExpenseReportPage() {
     { income: 0, expense: 0, profit: 0 },
   );
   const stats = [
-    { label: "Total Income", value: `$${totals.income.toLocaleString()}.00`, color: "text-green-500", icon: TrendingUp, bg: "bg-green-50" },
-    { label: "Total Expense", value: `$${totals.expense.toLocaleString()}.00`, color: "text-red-500", icon: TrendingDown, bg: "bg-red-50" },
-    { label: "Total Profit", value: `$${totals.profit.toLocaleString()}.00`, color: "text-blue-500", icon: DollarSign, bg: "bg-blue-50" },
+    { label: "Total Income", value: formatCurrency(totals.income), color: "text-green-500", icon: TrendingUp, bg: "bg-green-50" },
+    { label: "Total Expense", value: formatCurrency(totals.expense), color: "text-red-500", icon: TrendingDown, bg: "bg-red-50" },
+    { label: "Total Profit", value: formatCurrency(totals.profit), color: "text-blue-500", icon: DollarSign, bg: "bg-blue-50" },
   ];
 
   return (
