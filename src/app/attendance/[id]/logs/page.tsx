@@ -2,7 +2,7 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import AttendanceTimeline from "@/components/attendance/audit/AttendanceTimeline";
-import { History, Calendar, FileCheck, Edit3 } from "lucide-react";
+import { History, Calendar, FileCheck, Edit3, Cpu } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useEffect, useState } from "react";
 import { attendanceService, RawPunch } from "@/services/attendance/attendance.service";
