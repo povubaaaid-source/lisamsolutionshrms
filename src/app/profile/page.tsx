@@ -12,6 +12,7 @@ import {
   Save,
   Check,
   Eye,
+  EyeOff,
   Calendar,
   Fingerprint
 } from "lucide-react";
