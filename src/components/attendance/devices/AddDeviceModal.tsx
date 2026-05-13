@@ -171,10 +171,9 @@ export default function AddDeviceModal({ isOpen, onClose, onSuccess }: AddDevice
               {step === 2 ? "Back" : "Cancel"}
             </button>
             <Button 
-              type="button"
+              type={step === 2 ? "submit" : "button"}
               variant="primary"
               onClick={() => step === 1 ? setStep(2) : null}
-              {...(step === 2 ? { type: "submit" } : {})}
               disabled={loading}
               className="h-11 px-8 rounded-xl shadow-lg shadow-primary/20"
             >
