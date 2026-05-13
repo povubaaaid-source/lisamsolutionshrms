@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
+import { calculateAttendanceStatus, ShiftDefinition } from "@/lib/hr-utils";
 
 type ShiftSummary = {
   id?: number | string;
@@ -50,43 +51,14 @@ type AttendanceRecord = {
   shift_type?: ShiftSummary;
 };
 
-const timeToMinutes = (value?: string) => {
-  if (!value) return null;
-  const [hours, minutes] = value.split(":").map(Number);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
-  return hours * 60 + minutes;
-};
-
-const normalizeShiftMinute = (value?: string, shift?: ShiftSummary) => {
-  const minutes = timeToMinutes(value);
-  const start = timeToMinutes(shift?.start_time);
-  const end = timeToMinutes(shift?.end_time);
-  if (minutes === null) return null;
-  if (start !== null && end !== null && end <= start && minutes < start) return minutes + 24 * 60;
-  return minutes;
-};
-
-const getShiftForRow = (row: AttendanceRecord, employees: EmployeeOption[]) => {
+const getShiftForRow = (row: AttendanceRecord, employees: EmployeeOption[]): ShiftDefinition | undefined => {
   const employeeId = String(row.employee_id || row.user_id || row.employee?.id || "");
-  return (
+  const shift = (
     row.shift_type ||
     row.employee?.employee_detail?.shift_type ||
     employees.find((employee) => String(employee.id) === employeeId)?.employee_detail?.shift_type
   );
-};
-
-const calculateStatus = (row: AttendanceRecord, shift?: ShiftSummary) => {
-  if (row.status === "absent") return "absent";
-  if (row.half_day || row.status === "half-day") return "half-day";
-
-  const clockIn = normalizeShiftMinute(row.clock_in, shift);
-  const shiftStart = normalizeShiftMinute(shift?.start_time, shift);
-  const halfDayMark = normalizeShiftMinute(shift?.half_day_mark_time, shift);
-
-  if (clockIn !== null && halfDayMark !== null && clockIn >= halfDayMark) return "half-day";
-  if (row.late) return "late";
-  if (clockIn !== null && shiftStart !== null && clockIn > shiftStart + Number(shift?.late_grace_minutes || 0)) return "late";
-  return row.status || "present";
+  return shift as ShiftDefinition;
 };
 
 const getStatusClass = (status: string) => {
@@ -147,8 +119,8 @@ export default function AttendanceByDatePage() {
   };
 
   const dailyRows = useMemo(() => attendance.filter((row) => row.date === date), [attendance, date]);
-  const presentCount = dailyRows.filter((row) => ["present", "late"].includes(calculateStatus(row, getShiftForRow(row, employees)))).length;
-  const absentCount = dailyRows.filter((row) => calculateStatus(row, getShiftForRow(row, employees)) === "absent").length;
+  const presentCount = dailyRows.filter((row) => ["present", "late"].includes(calculateAttendanceStatus(row, getShiftForRow(row, employees)))).length;
+  const absentCount = dailyRows.filter((row) => calculateAttendanceStatus(row, getShiftForRow(row, employees)) === "absent").length;
 
   return (
     <DashboardLayout>
@@ -245,7 +217,7 @@ export default function AttendanceByDatePage() {
                       <div className="font-bold text-[13px]">{row.employee?.name || "Unknown"}</div>
                       <div className="text-[10px] text-gray-400 font-medium uppercase">{row.employee?.employee_detail?.designation?.name || "Staff"}</div>
                     </td>
-                    <td><span className={`label ${getStatusClass(calculateStatus(row, getShiftForRow(row, employees)))}`}>{calculateStatus(row, getShiftForRow(row, employees))}</span></td>
+                    <td><span className={`label ${getStatusClass(calculateAttendanceStatus(row, getShiftForRow(row, employees)))}`}>{calculateAttendanceStatus(row, getShiftForRow(row, employees))}</span></td>
                     <td>
                       <div className="font-medium">{row.clock_in || "--:--"}</div>
                       <div className="text-[10px] text-gray-400">IP: {row.clock_in_ip || "-"}</div>

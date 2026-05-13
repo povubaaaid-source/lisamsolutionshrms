@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
-import { getHolidayDate, getLeaveDate, getLeaveEmployeeId, parseOfficeOpenDays } from "@/lib/hr-utils";
+import { getHolidayDate, getLeaveDate, getLeaveEmployeeId, parseOfficeOpenDays, calculateAttendanceStatus, ShiftDefinition } from "@/lib/hr-utils";
 
 type ShiftSummary = {
   id?: number | string;
@@ -52,35 +52,7 @@ const now = new Date();
 const thisYear = now.getFullYear();
 const thisMonth = now.getMonth() + 1;
 
-const timeToMinutes = (value?: string) => {
-  if (!value) return null;
-  const [hours, minutes] = value.split(":").map(Number);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
-  return hours * 60 + minutes;
-};
-
-const normalizeShiftMinute = (value?: string, shift?: ShiftSummary) => {
-  const minutes = timeToMinutes(value);
-  const start = timeToMinutes(shift?.start_time);
-  const end = timeToMinutes(shift?.end_time);
-  if (minutes === null) return null;
-  if (start !== null && end !== null && end <= start && minutes < start) return minutes + 24 * 60;
-  return minutes;
-};
-
-const calculateStatus = (row: AttendanceRecord, shift?: ShiftSummary) => {
-  if (row.status === "absent") return "absent";
-  if (row.half_day || row.status === "half-day") return "half-day";
-
-  const clockIn = normalizeShiftMinute(row.clock_in, shift);
-  const shiftStart = normalizeShiftMinute(shift?.start_time, shift);
-  const halfDayMark = normalizeShiftMinute(shift?.half_day_mark_time, shift);
-
-  if (clockIn !== null && halfDayMark !== null && clockIn >= halfDayMark) return "half-day";
-  if (row.late) return "late";
-  if (clockIn !== null && shiftStart !== null && clockIn > shiftStart + Number(shift?.late_grace_minutes || 0)) return "late";
-  return row.status || "present";
-};
+// Local status helpers are removed in favor of hr-utils.ts
 
 export default function AttendanceSummaryPage() {
   const { showToast } = useToast();
@@ -173,7 +145,7 @@ export default function AttendanceSummaryPage() {
     const record = attendanceByEmployeeDay.get(`${employeeId}-${day}`);
     if (record) {
       const shift = record.shift_type || employees.find((employee) => String(employee.id) === String(employeeId))?.employee_detail?.shift_type;
-      return calculateStatus(record, shift);
+      return calculateAttendanceStatus(record, shift as ShiftDefinition);
     }
     if (holidays.some((holiday) => getHolidayDate(holiday) === dateString)) return "holiday";
     if (leaves.some((leave) => getLeaveEmployeeId(leave) === String(employeeId) && getLeaveDate(leave) === dateString && leave.status === "approved")) return "leave";

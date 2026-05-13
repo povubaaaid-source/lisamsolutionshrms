@@ -12,12 +12,13 @@ import {
   Save,
   Check,
   Eye,
-  EyeOff,
-  Calendar
+  Calendar,
+  Fingerprint
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import AttendanceIdentityCard from "@/components/attendance/employee/AttendanceIdentityCard";
 
 export default function ProfilePage() {
   const { showToast } = useToast();
@@ -169,6 +170,24 @@ export default function ProfilePage() {
                         <div className="space-y-3">
                             <Button type="button" className="btn-info btn-sm w-full">Select Image</Button>
                             <p className="text-[10px] text-gray-400 max-w-[200px]">Supported formats: JPG, PNG, GIF. Max size 2MB.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="border-t border-[#f2f2f3] pt-8">
+                    <h4 className="box-title text-sm font-bold uppercase mb-4 flex items-center">
+                        <Fingerprint className="h-4 w-4 mr-2 text-primary" /> Workforce Identity
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <AttendanceIdentityCard 
+                          biometricId="1002" 
+                          status="active" 
+                          lastScan="Today, 09:05 AM"
+                          assignedDevices={["Main Gate (MB460)", "Production Floor"]}
+                        />
+                        <div className="white-box p-6 bg-gray-50 border border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center text-center">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Security Note</p>
+                            <p className="text-[11px] font-bold text-gray-500">Your biometric ID is used for hardware recognition. Contact HR to update your fingerprint or face data.</p>
                         </div>
                     </div>
                 </div>

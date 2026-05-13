@@ -67,6 +67,10 @@ const seedStore: MockStore = {
       created_at: now,
     },
   ],
+  "attendance-devices": [
+    { id: 1, name: "Front Gate (MB460)", serial_number: "ZK-MB460-9901", ip_address: "192.168.1.50", status: "online", last_sync_at: now, location: "Main Entrance" },
+    { id: 2, name: "Production Floor", serial_number: "ZK-F22-8822", ip_address: "192.168.1.55", status: "offline", last_sync_at: new Date(Date.now() - 86400000).toISOString(), location: "Sector B" }
+  ],
   admins: [
     {
       id: 1,
@@ -1936,6 +1940,42 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
     if (!requireRole(config, "super_admin")) {
       return jsonResponse(config, 403, { success: false, message: "Only super admins can create platform admins." });
     }
+  }
+
+  // Attendance Device Management
+  if (resource === "attendance-devices" || resource === "v1/attendance-devices") {
+    if (method === "get") {
+      return jsonResponse(config, 200, apiEnvelope(store["attendance-devices"] || []));
+    }
+    if (method === "post" && id) {
+      return jsonResponse(config, 200, apiEnvelope({ success: true }, "Device action executed"));
+    }
+  }
+
+  // Attendance Audit Logs
+  if (resource === "attendance" && id === "audit") {
+    const employeeId = action; // From ['attendance', 'audit', 'employeeId', 'date']
+    const date = segments[3] || new Date().toISOString().slice(0, 10);
+    
+    return jsonResponse(config, 200, apiEnvelope({
+      id: `${employeeId}-${date}`,
+      date,
+      punches: [
+        { id: 'p1', employee_id: employeeId, device_id: 1, timestamp: `${date}T09:05:22`, type: 'check_in', status: 'processed', metadata: { ip: '192.168.1.50', auth_mode: 'Fingerprint' } },
+        { id: 'p2', employee_id: employeeId, device_id: 1, timestamp: `${date}T09:07:11`, type: 'check_in', status: 'ignored', metadata: { ip: '192.168.1.50', auth_mode: 'Face' } },
+        { id: 'p3', employee_id: employeeId, device_id: 2, timestamp: `${date}T18:15:45`, type: 'check_out', status: 'processed', metadata: { ip: '192.168.1.55', auth_mode: 'Card' } },
+      ],
+      processed_attendance: {
+        clock_in: '09:05:22',
+        clock_out: '18:15:45',
+        status: 'present'
+      }
+    }));
+  }
+
+  // Attendance Override
+  if (resource === "attendance" && id === "override" && method === "post") {
+    return jsonResponse(config, 200, apiEnvelope({ success: true }, "Attendance overridden successfully"));
   }
 
   if (resource === "admins" && !requireRole(config, "super_admin")) {

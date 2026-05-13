@@ -2,12 +2,13 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Button from "@/components/ui/Button";
-import { Plus, Users, RefreshCw, Clock } from "lucide-react";
+import { Plus, Users, RefreshCw, Clock, History, Search, Filter, Download } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
+import { calculateAttendanceStatus, ShiftDefinition } from "@/lib/hr-utils";
 
 type EmployeeOption = {
   id: number | string;
@@ -60,47 +61,14 @@ const formatTime = (value?: string) => value || "--:--";
 const getEmployeeName = (row: AttendanceRecord, employees: EmployeeOption[]) =>
   row.employee?.name || employees.find((employee) => String(employee.id) === String(row.employee_id || row.user_id))?.name || "Unknown";
 
-const timeToMinutes = (value?: string) => {
-  if (!value) return null;
-  const [hours, minutes] = value.split(":").map(Number);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
-  return hours * 60 + minutes;
-};
-
-const normalizeShiftMinute = (value?: string, shift?: ShiftSummary) => {
-  const minutes = timeToMinutes(value);
-  const start = timeToMinutes(shift?.start_time);
-  const end = timeToMinutes(shift?.end_time);
-  if (minutes === null) return null;
-  if (start !== null && end !== null && end <= start && minutes < start) return minutes + 24 * 60;
-  return minutes;
-};
-
-const getShiftForRow = (row: AttendanceRecord, employees: EmployeeOption[]) => {
+const getShiftForRow = (row: AttendanceRecord, employees: EmployeeOption[]): ShiftDefinition | undefined => {
   const employeeId = String(row.employee_id || row.user_id || row.employee?.id || "");
-  return (
+  const shift = (
     row.shift_type ||
     row.employee?.employee_detail?.shift_type ||
     employees.find((employee) => String(employee.id) === employeeId)?.employee_detail?.shift_type
   );
-};
-
-const calculateStatus = (row: AttendanceRecord, shift?: ShiftSummary) => {
-  if (row.status === "absent") return "absent";
-  if (row.half_day || row.status === "half-day") return "half-day";
-
-  const clockIn = normalizeShiftMinute(row.clock_in, shift);
-  const shiftStart = normalizeShiftMinute(shift?.start_time, shift);
-  const halfDayMark = normalizeShiftMinute(shift?.half_day_mark_time, shift);
-
-  if (clockIn !== null && halfDayMark !== null && clockIn >= halfDayMark) return "half-day";
-  if (row.late) return "late";
-  if (clockIn !== null && shiftStart !== null) {
-    const grace = Number(shift?.late_grace_minutes || 0);
-    if (clockIn > shiftStart + grace) return "late";
-  }
-
-  return row.status || "present";
+  return shift as ShiftDefinition;
 };
 
 const getShiftLabel = (shift?: ShiftSummary) => {
@@ -184,7 +152,7 @@ export default function AttendancePage() {
   }, [attendance, dateFrom, dateTo, selectedEmployee]);
 
   const stats = useMemo(() => {
-    const calculatedRows = filteredAttendance.map((row) => calculateStatus(row, getShiftForRow(row, employees)));
+    const calculatedRows = filteredAttendance.map((row) => calculateAttendanceStatus(row, getShiftForRow(row, employees)));
     const present = calculatedRows.filter((status) => status === "present").length;
     const late = calculatedRows.filter((status) => status === "late").length;
     const absent = calculatedRows.filter((status) => status === "absent").length;
@@ -300,12 +268,13 @@ export default function AttendancePage() {
                   <th>Clock Out</th>
                   <th>Working From</th>
                   <th>Others</th>
+                  <th>Audit</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredAttendance.map((row) => {
                   const shift = getShiftForRow(row, employees);
-                  const status = calculateStatus(row, shift);
+                  const status = calculateAttendanceStatus(row, shift);
 
                   return (
                   <tr key={row.id}>
@@ -336,6 +305,15 @@ export default function AttendancePage() {
                             ? `Late after ${shift?.late_grace_minutes || 0}m grace`
                             : "Full day"}
                       </div>
+                    </td>
+                    <td>
+                      <Link 
+                        href={`/attendance/${row.employee_id || row.user_id || row.employee?.id}/logs?date=${row.date}`}
+                        className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all inline-block"
+                        title="View Raw Device Logs"
+                      >
+                        <History className="h-4 w-4" />
+                      </Link>
                     </td>
                   </tr>
                   );

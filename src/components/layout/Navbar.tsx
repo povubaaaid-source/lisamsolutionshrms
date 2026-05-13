@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, Power, ChevronDown, User, LogIn, Timer, Menu, RefreshCw, Briefcase } from "lucide-react";
+import { Bell, Search, Power, ChevronDown, User, LogIn, Timer, Menu, RefreshCw, Briefcase, Activity } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
@@ -227,6 +227,15 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
           <span>Active Timers</span>
           <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] font-black text-white">0</span>
         </button>
+
+        {/* Biometric Heartbeat */}
+        <div className="hidden xl:flex items-center space-x-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
+           <div className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
+           </div>
+           <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Gateway Active</span>
+        </div>
 
         {/* Notifications */}
         <div className="relative">
