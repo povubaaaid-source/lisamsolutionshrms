@@ -18,9 +18,9 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import api from "@/lib/api";
 import {
-  attendanceStatus,
+  calculateAttendanceStatus,
   dateRange,
-  formatMinutes,
+  formatDuration,
   getAttendanceEmployeeId,
   getEmployeeDisplayId,
   getHolidayDate,
@@ -98,7 +98,7 @@ export default function AttendanceReportPage() {
         let minutes = 0;
 
         rows.forEach((row) => {
-          const status = attendanceStatus(row, row.shift_type || employee.employee_detail?.shift_type);
+          const status = calculateAttendanceStatus(row, row.shift_type || employee.employee_detail?.shift_type);
           const rowDate = String(row.date || row.clock_in_date || "").slice(0, 10);
           if (["present", "late", "half-day"].includes(status)) presentDates.add(rowDate);
           if (status === "late") late += 1;
@@ -117,7 +117,7 @@ export default function AttendanceReportPage() {
           late,
           halfDay,
           totalWorking,
-          hoursClocked: formatMinutes(minutes),
+          hoursClocked: formatDuration(minutes),
         };
       });
   }, [attendanceRows, employees, holidays, month, officeOpenDays, selectedEmployee, year]);

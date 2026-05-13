@@ -99,6 +99,30 @@ export const calculateLateMinutes = (clockInTime?: string, shift?: ShiftDefiniti
 };
 
 /**
+ * Calculates the numeric units for a leave record (e.g., 0.5 for half day).
+ */
+export const leaveUnits = (record: HRRecord): number => {
+  const duration = String(record.duration || record.leave_type?.duration || "").toLowerCase();
+  if (duration.includes("half") || record.half_day === true) return 0.5;
+  return 1;
+};
+
+/**
+ * Calculates minutes between two time strings.
+ */
+export const minutesBetween = (start?: string, end?: string): number => {
+  const startMin = timeToMinutes(start);
+  const endMin = timeToMinutes(end);
+  if (startMin === null || endMin === null) return 0;
+  
+  // Handle overnight
+  if (endMin < startMin) {
+    return (endMin + 24 * 60) - startMin;
+  }
+  return endMin - startMin;
+};
+
+/**
  * Formats minutes into human-readable duration.
  */
 export const formatDuration = (minutes: number) => {

@@ -32,8 +32,8 @@ import Button from "@/components/ui/Button";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import {
-  attendanceStatus,
-  formatMinutes,
+  calculateAttendanceStatus,
+  formatDuration,
   getAttendanceEmployeeId,
   getEmployeeDisplayId,
   getEmployeeId,
@@ -181,7 +181,7 @@ export default function EmployeeDetailPage() {
     const quotaTotal = leaveQuotas.length > 0
       ? leaveQuotas.reduce((total, quota) => total + Number(quota.no_of_leaves || quota.leaves || 0), 0)
       : leaveTypes.reduce((total, type) => total + Number(type.no_of_leaves || type.leave_number || type.leaves || 0), 0);
-    const presentEntries = attendanceRows.filter((row) => ["present", "late", "half-day"].includes(attendanceStatus(row, row.shift_type)));
+    const presentEntries = attendanceRows.filter((row) => ["present", "late", "half-day"].includes(calculateAttendanceStatus(row, row.shift_type)));
     const attendanceRate = attendanceRows.length > 0 ? Math.round((presentEntries.length / attendanceRows.length) * 100) : 0;
 
     return {
@@ -273,7 +273,7 @@ export default function EmployeeDetailPage() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
           {[
             { label: "Tasks Done", value: derived.completedTasks, icon: CheckCircle2, color: "text-green-500", bg: "bg-green-50" },
-            { label: "Hours Logged", value: formatMinutes(derived.loggedMinutes), icon: Clock, color: "text-blue-500", bg: "bg-blue-50" },
+            { label: "Hours Logged", value: formatDuration(derived.loggedMinutes), icon: Clock, color: "text-blue-500", bg: "bg-blue-50" },
             { label: "Leaves Taken", value: derived.approvedLeaveUnits, icon: FileText, color: "text-orange-500", bg: "bg-orange-50" },
             { label: "Remaining Leaves", value: derived.remainingLeaves, icon: XCircle, color: "text-red-500", bg: "bg-red-50" },
           ].map((stat) => (
@@ -416,7 +416,7 @@ export default function EmployeeDetailPage() {
                     <td className="px-6 py-4 text-sm font-bold text-gray-700">{log.project?.project_name || log.project_name || "Project"}</td>
                     <td className="px-6 py-4 text-xs font-bold text-gray-500">{formatDateTime(log.start_time)}</td>
                     <td className="px-6 py-4 text-xs font-bold text-gray-500">{formatDateTime(log.end_time)}</td>
-                    <td className="px-6 py-4 text-xs font-black text-gray-700">{formatMinutes(Number(log.total_minutes || minutesBetween(log.start_time, log.end_time)))}</td>
+                    <td className="px-6 py-4 text-xs font-black text-gray-700">{formatDuration(Number(log.total_minutes || minutesBetween(log.start_time, log.end_time)))}</td>
                     <td className="max-w-[220px] truncate px-6 py-4 text-xs text-gray-500">{log.memo || "-"}</td>
                   </tr>
                 ))}
