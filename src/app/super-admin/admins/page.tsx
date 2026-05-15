@@ -9,7 +9,6 @@ import {
   Eye,
   EyeOff,
   Filter,
-  Plus,
   RefreshCw,
   Save,
   Search,
@@ -23,14 +22,9 @@ import Card from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import api from "@/lib/api";
 import {
-  adminAssignablePermissionModules,
   getModulesFromPermissions,
-  permissionActions,
-  permissionKey,
   rolePermissions,
-  type PermissionAction,
   type PermissionKey,
-  type PermissionModuleKey,
 } from "@/lib/auth-contract";
 import { emailPattern, validateAdminPassword } from "@/lib/admin-password";
 import { useToast } from "@/context/ToastContext";
@@ -146,32 +140,6 @@ const getAdminRoleLabel = (permissions: PermissionKey[] = []) => {
   return "Custom Admin";
 };
 
-const hasPermission = (permissions: PermissionKey[], moduleKey: PermissionModuleKey, action: PermissionAction) => {
-  const key = permissionKey(moduleKey, action);
-  return permissions.includes("*") || permissions.includes(`${moduleKey}.*` as PermissionKey) || permissions.includes(key);
-};
-
-const togglePermission = (permissions: PermissionKey[], moduleKey: PermissionModuleKey, action: PermissionAction) => {
-  const key = permissionKey(moduleKey, action);
-  const moduleWildcard = `${moduleKey}.*` as PermissionKey;
-  if (permissions.includes(moduleWildcard)) {
-    const moduleItem = adminAssignablePermissionModules.find((item) => item.key === moduleKey);
-    const expanded = moduleItem?.actions.map((moduleAction) => permissionKey(moduleKey, moduleAction)).filter((permission) => permission !== key) || [];
-    return normalizePermissions([...permissions.filter((permission) => permission !== moduleWildcard), ...expanded]);
-  }
-  return permissions.includes(key) ? permissions.filter((permission) => permission !== key) : normalizePermissions([...permissions, key]);
-};
-
-const setModulePermissions = (permissions: PermissionKey[], moduleKey: PermissionModuleKey, enabled: boolean) => {
-  const moduleItem = adminAssignablePermissionModules.find((item) => item.key === moduleKey);
-  if (!moduleItem) return permissions;
-
-  const moduleKeys = moduleItem.actions.map((action) => permissionKey(moduleKey, action));
-  const moduleWildcard = `${moduleKey}.*` as PermissionKey;
-  const withoutModule = permissions.filter((permission) => permission !== moduleWildcard && !moduleKeys.includes(permission));
-  return normalizePermissions(enabled ? [...withoutModule, ...moduleKeys] : withoutModule);
-};
-
 export default function SuperAdminAdminsPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -222,12 +190,12 @@ export default function SuperAdminAdminsPage() {
     () =>
       validateAdminPassword({
         password: form.password,
-        required: !editingAdmin,
+        required: false,
         name: form.name,
         email: form.email,
         companyName: selectedCompanyName,
       }),
-    [editingAdmin, form.email, form.name, form.password, selectedCompanyName],
+    [form.email, form.name, form.password, selectedCompanyName],
   );
 
   const visiblePasswordError = passwordTouched && passwordValidationMessage;
@@ -257,14 +225,6 @@ export default function SuperAdminAdminsPage() {
     };
   }, [admins]);
 
-  const openCreateForm = () => {
-    setEditingAdmin(null);
-    setForm({ ...emptyForm });
-    setShowPassword(false);
-    setPasswordTouched(false);
-    setFormOpen(true);
-  };
-
   const openEditForm = (admin: AdminAccount) => {
     setEditingAdmin(admin);
     setForm({
@@ -280,23 +240,18 @@ export default function SuperAdminAdminsPage() {
     setFormOpen(true);
   };
 
-  const applyTemplate = (permissions: PermissionKey[]) => {
-    setForm((current) => ({ ...current, permissions: normalizePermissions(permissions) }));
-  };
-
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!editingAdmin) {
+      showToast("Admins can only be edited from this panel for now.", "error");
+      return;
+    }
     if (!form.name.trim() || !form.email.trim() || !form.company_id) {
       showToast("Name, email, and company are required.", "error");
       return;
     }
     if (!emailPattern.test(form.email.trim())) {
       showToast("Enter a valid admin email address.", "error");
-      return;
-    }
-    if (!editingAdmin && !form.password.trim()) {
-      setPasswordTouched(true);
-      showToast("Temporary password is required for new admins.", "error");
       return;
     }
     if (passwordValidationMessage) {
@@ -327,17 +282,10 @@ export default function SuperAdminAdminsPage() {
     };
 
     try {
-      if (editingAdmin) {
-        const response = await api.put(`/admins/${editingAdmin.id}`, payload);
-        const updated = response.data.data || { ...editingAdmin, ...payload };
-        setAdmins((current) => current.map((admin) => (sameId(admin.id, editingAdmin.id) ? updated : admin)));
-        showToast("Admin access updated successfully.");
-      } else {
-        const response = await api.post("/admins", payload);
-        const created = response.data.data || { ...payload, id: Date.now() };
-        setAdmins((current) => [created, ...current]);
-        showToast("Admin created successfully.");
-      }
+      const response = await api.put(`/admins/${editingAdmin.id}`, payload);
+      const updated = response.data.data || { ...editingAdmin, ...payload };
+      setAdmins((current) => current.map((admin) => (sameId(admin.id, editingAdmin.id) ? updated : admin)));
+      showToast("Admin access updated successfully.");
       setFormOpen(false);
       setEditingAdmin(null);
     } catch (error) {
@@ -385,10 +333,6 @@ export default function SuperAdminAdminsPage() {
             <h1 className="text-base font-black uppercase tracking-widest text-gray-800">Company Admins</h1>
             <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Platform controlled admin access</p>
           </div>
-          <Button type="button" onClick={openCreateForm} className="h-10 bg-primary px-5 text-[10px] font-black uppercase tracking-widest text-white">
-            <Plus className="h-4 w-4" />
-            Add Admin
-          </Button>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -572,8 +516,8 @@ export default function SuperAdminAdminsPage() {
         </Card>
       </div>
 
-      <Modal isOpen={formOpen} onClose={() => setFormOpen(false)} title={editingAdmin ? "Edit Admin" : "Create Admin"} size="xl">
-        <form key={editingAdmin ? `edit-admin-${editingAdmin.id}` : "create-admin"} onSubmit={handleSave} noValidate autoComplete="off" className="space-y-6">
+      <Modal isOpen={formOpen} onClose={() => setFormOpen(false)} title="Edit Admin" size="xl">
+        <form key={editingAdmin ? `edit-admin-${editingAdmin.id}` : "edit-admin"} onSubmit={handleSave} noValidate autoComplete="off" className="space-y-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Name</label>
@@ -598,27 +542,11 @@ export default function SuperAdminAdminsPage() {
             </div>
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Company / Branch</label>
-              {editingAdmin ? (
-                <input
-                  readOnly
-                  value={form.company_id ? selectedCompanyName : "Unassigned"}
-                  className="w-full cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs font-bold text-gray-500 outline-none"
-                />
-              ) : (
-                <select
-                  required
-                  value={form.company_id}
-                  onChange={(event) => setForm((current) => ({ ...current, company_id: event.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
-                >
-                  <option value="">Select Company</option>
-                  {companies.map((company) => (
-                    <option key={company.id} value={company.id}>
-                      {getCompanyName(company)}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <input
+                readOnly
+                value={form.company_id ? selectedCompanyName : "Unassigned"}
+                className="w-full cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs font-bold text-gray-500 outline-none"
+              />
             </div>
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Status</label>
@@ -648,7 +576,7 @@ export default function SuperAdminAdminsPage() {
                       ? "border-red-300 focus:border-red-400 focus:ring-red-100"
                       : "border-gray-200 focus:border-primary focus:ring-primary/10"
                   }`}
-                  placeholder={editingAdmin ? "Leave blank to keep current password" : "Minimum 8 characters"}
+                  placeholder="Saved admin password"
                 />
                 <button
                   type="button"
@@ -664,7 +592,7 @@ export default function SuperAdminAdminsPage() {
                 <p className="mt-1.5 text-[10px] font-bold text-red-500">{passwordValidationMessage}</p>
               ) : (
                 <p className="mt-1.5 text-[10px] font-bold text-gray-400">
-                  {editingAdmin ? "Saved password is loaded here. Use the eye button to view it or type a new one." : "Use a unique password with 8 or more characters."}
+                  Saved password is loaded here. Use the eye button to view it or type a new one.
                 </p>
               )}
             </div>
