@@ -139,7 +139,7 @@ export default function CompaniesPage() {
       <div className="space-y-6">
         
         {/* Header */}
-        <div className="row bg-title mb-6">
+        <div className="row bg-title mb-2">
             <div className="col-lg-6 col-md-6 col-sm-4 col-xs-12">
                 <h4 className="page-title m-0">
                     <Shield className="h-5 w-5 mr-2 inline-block text-primary" /> 
@@ -147,11 +147,10 @@ export default function CompaniesPage() {
                     <span className="text-info border-l border-[#eee] ml-2 pl-2">{companies.length}</span>
                     <span className="text-[10px] text-gray-400 ml-1 uppercase">Total Records</span>
                 </h4>
-            </div>
-            <div className="col-lg-6 col-sm-8 col-md-6 col-xs-12 flex justify-end space-x-2">
-                <Button className="btn-info btn-outline btn-sm">
+            <div className="col-lg-6 col-sm-8 col-md-6 col-xs-12 flex align-middle justify-end space-x-2">
+                {/* <Button className="btn-info btn-outline btn-sm">
                     Manage Default Language <Languages className="h-4 w-4 ml-1 inline-block" />
-                </Button>
+                </Button> */}
                 <Link href="/super-admin/companies/create">
                   <PermissionGate permission="company.create">
                     <Button className="btn-success btn-outline btn-sm">
@@ -159,6 +158,7 @@ export default function CompaniesPage() {
                     </Button>
                   </PermissionGate>
                 </Link>
+            </div>
             </div>
         </div>
 
@@ -187,9 +187,9 @@ export default function CompaniesPage() {
                     </select>
                 </div>
                 <div className="flex space-x-2">
-                    <Button onClick={fetchCompanies} className="btn-success btn-sm flex-1">
+                    {/* <Button onClick={fetchCompanies} className="btn-success btn-sm flex-1">
                         <Check className="h-4 w-4 mr-1 inline-block" /> Apply
-                    </Button>
+                    </Button> */}
                     <Button
                       onClick={() => {
                         setSearch("");
@@ -305,6 +305,7 @@ export default function CompaniesPage() {
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Email</label>
               <input required type="email" value={companyForm.email} onChange={(event) => setCompanyForm((prev) => ({ ...prev, email: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold" />
             </div>
+            <div className="space-y-1.5">
             <div className="space-y-1.5 md:col-span-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Status</label>
               <select value={companyForm.status} onChange={(event) => setCompanyForm((prev) => ({ ...prev, status: event.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-xs font-bold">
@@ -315,10 +316,11 @@ export default function CompaniesPage() {
           </div>
           <div className="flex gap-3 border-t border-gray-100 pt-5">
             <Button type="button" onClick={() => setEditingCompany(null)} className="btn-default flex-1">Cancel</Button>
-            <Button type="submit" className="btn-success flex-1"><Save className="h-4 w-4 mr-2" /> Save Record</Button>
+            <Button type="submit" className="btn-success flex-1"><Save className="h-4 w-4 mr-2" /> Save Company</Button>
+          </div>
           </div>
         </form>
       </Modal>
     </DashboardLayout>
   );
-}
+} 

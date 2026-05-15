@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Building2, Mail, Save, Shield, User } from "lucide-react";
+import { ArrowLeft, Building2, Eye, EyeOff, Mail, Save, Shield, User } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import apiClient from "@/lib/api-client";
+import { emailPattern, validateAdminPassword } from "@/lib/admin-password";
+import { useToast } from "@/context/ToastContext";
 
 type CompanyAdminPayload = {
   company: {
@@ -27,7 +29,10 @@ type CompanyAdminPayload = {
 
 export default function CreateCompanyPage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
   const [form, setForm] = useState<CompanyAdminPayload>({
     company: {
       name: "",
@@ -52,17 +57,63 @@ export default function CreateCompanyPage() {
     setForm((current) => ({ ...current, admin: { ...current.admin, [name]: value } }));
   };
 
+  const passwordValidationMessage = useMemo(
+    () =>
+      validateAdminPassword({
+        password: form.admin.password,
+        required: true,
+        name: form.admin.name,
+        email: form.admin.email,
+        companyName: form.company.name,
+      }),
+    [form.admin.email, form.admin.name, form.admin.password, form.company.name],
+  );
+
+  const visiblePasswordError = passwordTouched && passwordValidationMessage;
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    if (!form.company.name.trim() || !form.company.email.trim() || !form.admin.name.trim() || !form.admin.email.trim()) {
+      showToast("Company name, company email, admin name, and admin email are required.", "error");
+      return;
+    }
+    if (!emailPattern.test(form.company.email.trim())) {
+      showToast("Enter a valid company email address.", "error");
+      return;
+    }
+    if (!emailPattern.test(form.admin.email.trim())) {
+      showToast("Enter a valid admin email address.", "error");
+      return;
+    }
+    if (passwordValidationMessage) {
+      setPasswordTouched(true);
+      showToast(passwordValidationMessage, "error");
+      return;
+    }
+
     setSaving(true);
 
     try {
-      await apiClient.create("companies", form);
+      await apiClient.create("companies", {
+        company: {
+          ...form.company,
+          name: form.company.name.trim(),
+          email: form.company.email.trim(),
+        },
+        admin: {
+          ...form.admin,
+          name: form.admin.name.trim(),
+          email: form.admin.email.trim(),
+          password: form.admin.password.trim(),
+        },
+      });
+      showToast("Company and admin created successfully.");
+      router.push("/super-admin/admins");
     } catch (err) {
       console.warn("Create company endpoint pending:", err);
-    } finally {
+      showToast("Unable to create company and admin.", "error");
       setSaving(false);
-      router.push("/super-admin/companies");
     }
   };
 
@@ -81,21 +132,21 @@ export default function CreateCompanyPage() {
           </Link>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} noValidate autoComplete="off" className="space-y-6">
           <Card title="Company / Branch Workspace" className="border-none bg-white p-8 shadow-sm">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Company / Branch Name</label>
                 <div className="relative">
                   <Building2 className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-                  <input required value={form.company.name} onChange={(event) => updateCompany("name", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
+                  <input required autoComplete="off" value={form.company.name} onChange={(event) => updateCompany("name", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
                 </div>
               </div>
               <div>
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Company Email</label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-                  <input required type="email" value={form.company.email} onChange={(event) => updateCompany("email", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
+                  <input required type="email" autoComplete="off" value={form.company.email} onChange={(event) => updateCompany("email", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
                 </div>
               </div>
               <div>
@@ -125,22 +176,52 @@ export default function CreateCompanyPage() {
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Admin Name</label>
                 <div className="relative">
                   <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-                  <input required value={form.admin.name} onChange={(event) => updateAdmin("name", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
+                  <input required autoComplete="off" value={form.admin.name} onChange={(event) => updateAdmin("name", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
                 </div>
               </div>
               <div>
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Admin Email</label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-                  <input required type="email" value={form.admin.email} onChange={(event) => updateAdmin("email", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
+                  <input required type="email" autoComplete="new-email" value={form.admin.email} onChange={(event) => updateAdmin("email", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
                 </div>
               </div>
               <div>
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Password</label>
                 <div className="relative">
                   <Shield className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-                  <input required type="password" value={form.admin.password} onChange={(event) => updateAdmin("password", event.target.value)} className="w-full rounded-xl border border-gray-100 bg-gray-50 py-3 pl-11 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10" />
+                  <input
+                    required
+                    minLength={8}
+                    type={showAdminPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={form.admin.password}
+                    onBlur={() => setPasswordTouched(true)}
+                    onChange={(event) => {
+                      setPasswordTouched(true);
+                      updateAdmin("password", event.target.value);
+                    }}
+                    className={`w-full rounded-xl border bg-gray-50 py-3 pl-11 pr-12 text-xs font-bold outline-none focus:ring-2 ${
+                      visiblePasswordError
+                        ? "border-red-300 focus:border-red-400 focus:ring-red-100"
+                        : "border-gray-100 focus:ring-primary/10"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword((current) => !current)}
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                    aria-label={showAdminPassword ? "Hide password" : "Show password"}
+                    title={showAdminPassword ? "Hide password" : "Show password"}
+                  >
+                    {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
+                {visiblePasswordError ? (
+                  <p className="mt-1.5 text-[10px] font-bold text-red-500">{passwordValidationMessage}</p>
+                ) : (
+                  <p className="mt-1.5 text-[10px] font-bold text-gray-400">Required. Use a unique password with 8 or more characters.</p>
+                )}
               </div>
             </div>
           </Card>

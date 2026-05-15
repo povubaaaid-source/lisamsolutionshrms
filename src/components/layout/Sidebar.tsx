@@ -61,7 +61,7 @@ const menuItems: MenuItem[] = [
       { label: "Packages", href: "/super-admin/packages" },
       { label: "Invoices", href: "/super-admin/invoices" },
       { label: "Settings", href: "/super-admin/settings" },
-    ],
+    ],  
   },
   {
     icon: LayoutDashboard,
@@ -242,6 +242,17 @@ const menuItems: MenuItem[] = [
   { icon: Search, label: "Search", href: "/search" },
 ];
 
+const hiddenSidebarLabels = new Set(["FAQ", "Search"]);
+
+const superAdminMenuItems: MenuItem[] = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/super-admin/dashboard" },
+  { icon: Users, label: "Company / Branches", href: "/super-admin/companies" },
+  { icon: Shield, label: "Admins", href: "/super-admin/admins" },
+  { icon: ShoppingBag, label: "Packages", href: "/super-admin/packages" },
+  { icon: DollarSign, label: "Invoices", href: "/super-admin/invoices" },
+  { icon: Settings, label: "Settings", href: "/super-admin/settings" },
+];
+
 const quickAddItems = [
   { label: "Add Project", href: "/projects/create" },
   { label: "Add Task", href: "/tasks/create" },
@@ -253,10 +264,10 @@ const quickAddItems = [
 ];
 
 const roleMenuAccess: Record<UserRole, string[]> = {
-  super_admin: ["Super Admin"],
+  super_admin: superAdminMenuItems.map((item) => item.label),
   admin: menuItems.filter((item) => item.label !== "Super Admin").map((item) => item.label),
-  employee: ["Dashboard", "HR", "Work", "Payroll", "Tickets", "Messages", "Events", "Notice Board", "FAQ", "Search"],
-  client: ["Dashboard", "Work", "Finance", "Tickets", "Messages", "Events", "Notice Board", "FAQ", "Search"],
+  employee: ["Dashboard", "HR", "Work", "Payroll", "Tickets", "Messages", "Events", "Notice Board"],
+  client: ["Dashboard", "Work", "Finance", "Tickets", "Messages", "Events", "Notice Board"],
 };
 
 const roleSubmenuAccess: Partial<Record<UserRole, Record<string, string[]>>> = {
@@ -276,7 +287,7 @@ const roleSubmenuAccess: Partial<Record<UserRole, Record<string, string[]>>> = {
 };
 
 const roleQuickAddAccess: Record<UserRole, string[]> = {
-  super_admin: [],
+  super_admin: [],  
   admin: quickAddItems.map((item) => item.label),
   employee: ["Add Task", "Add Ticket"],
   client: ["Add Ticket"],
@@ -320,11 +331,18 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const userName = user?.name || "Admin User";
 
   const filteredMenuItems = useMemo(() => {
+    if (userRole === "super_admin") {
+      return superAdminMenuItems.filter(
+        (item) => isSaasBillingEnabled || (item.href !== "/super-admin/packages" && item.href !== "/super-admin/invoices")
+      );
+    }
+
     const allowedMenus = roleMenuAccess[userRole];
     const submenuAccess = roleSubmenuAccess[userRole] || {};
 
     return menuItems
       .filter((item) => allowedMenus.includes(item.label))
+      .filter((item) => !hiddenSidebarLabels.has(item.label))
       .filter((item) => isSaasBillingEnabled || item.label !== "Billing")
       .filter((item) => canOpenItem(user, userRole, item))
       .map((item) => {
@@ -380,9 +398,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       setOpenMenus((prev) =>
         prev.includes(item.label) ? [] : [item.label]
       );
-      if (!mobileOpen && item.href && !isActive(item.href)) {
-        router.push(item.href);
-      }
     } else {
       router.push(item.href);
       setOpenMenus([]);
@@ -443,75 +458,107 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
           [&::-webkit-scrollbar-thumb]:rounded-full 
           hover:[&::-webkit-scrollbar-thumb]:bg-white/20 
           transition-colors">
-          <ul className="space-y-1.5 px-3">
-            {filteredMenuItems.map((item) => {
-              const isOpen = isMenuOpen(item);
-              const isItemActive = isActive(item.href);
+          {userRole === "super_admin" ? (
+            <div className="space-y-1.5 px-3">
+              {filteredMenuItems.map((item) => {
+                const isItemActive = isActive(item.href);
 
-              return (
-                <li key={item.label}>
-                  <div
-                    className={`flex items-center rounded-xl px-3 py-3 text-[15px] transition-all cursor-pointer group ${isItemActive || isOpen
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => {
+                      setOpenMenus([]);
+                      onMobileClose?.();
+                    }}
+                    title={!isExpanded ? item.label : ""}
+                    aria-current={isItemActive ? "page" : undefined}
+                    className={`flex items-center rounded-xl px-3 py-3 text-[15px] transition-all group ${isItemActive
                       ? "bg-primary text-white shadow-lg shadow-primary/20"
                       : "text-gray-400 hover:bg-white/5 hover:text-white"
-                      } ${!isExpanded ? "justify-center px-0 w-10 mx-auto" : "justify-between"}`}
-                    onClick={() => toggleMenu(item)}
-                    title={!isExpanded ? item.label : ""}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        toggleMenu(item);
-                      }
-                    }}
-                    aria-expanded={item.submenu ? isOpen : undefined}
+                      } ${!isExpanded ? "justify-center px-0 w-10 mx-auto" : "justify-start"}`}
                   >
-                    <div className="flex items-center space-x-3 min-w-0">
-                      <item.icon className={`h-5 w-5 flex-shrink-0 ${isItemActive || isOpen ? "text-white" : "text-gray-400 group-hover:text-white"}`} />
-                      {isExpanded && (
-                        <span className="truncate animate-in slide-in-from-left-2 duration-300">
-                          {item.label}
-                        </span>
-                      )}
-                    </div>
-                    {isExpanded && item.submenu && (
-                      <div className="transition-transform duration-200">
-                        {isOpen ? (
-                          <ChevronUp className="h-3.5 w-3.5 opacity-60" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                    <item.icon className={`h-5 w-5 flex-shrink-0 ${isItemActive ? "text-white" : "text-gray-400 group-hover:text-white"}`} />
+                    {isExpanded && (
+                      <span className="ml-3 truncate animate-in slide-in-from-left-2 duration-300">
+                        {item.label}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <ul className="space-y-1.5 px-3">
+              {filteredMenuItems.map((item) => {
+                const isOpen = isMenuOpen(item);
+                const isItemActive = isActive(item.href);
+
+                return (
+                  <li key={item.label}>
+                    <div
+                      className={`flex items-center rounded-xl px-3 py-3 text-[15px] transition-all cursor-pointer group ${isItemActive || isOpen
+                        ? "bg-primary text-white shadow-lg shadow-primary/20"
+                        : "text-gray-400 hover:bg-white/5 hover:text-white"
+                        } ${!isExpanded ? "justify-center px-0 w-10 mx-auto" : "justify-between"}`}
+                      onClick={() => toggleMenu(item)}
+                      title={!isExpanded ? item.label : ""}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleMenu(item);
+                        }
+                      }}
+                      aria-expanded={item.submenu ? isOpen : undefined}
+                    >
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <item.icon className={`h-5 w-5 flex-shrink-0 ${isItemActive || isOpen ? "text-white" : "text-gray-400 group-hover:text-white"}`} />
+                        {isExpanded && (
+                          <span className="truncate animate-in slide-in-from-left-2 duration-300">
+                            {item.label}
+                          </span>
                         )}
                       </div>
-                    )}
-                  </div>
+                      {isExpanded && item.submenu && (
+                        <div className="transition-transform duration-200">
+                          {isOpen ? (
+                            <ChevronUp className="h-3.5 w-3.5 opacity-60" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                          )}
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Submenu */}
-                  {item.submenu && isOpen && isExpanded && (
-                    <ul className="mt-1 space-y-1 ml-4 border-l border-white/10 pl-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                      {item.submenu.map((sub) => {
-                        const isSubActive = isActive(sub.href);
-                        return (
-                          <li key={sub.label}>
-                            <Link
-                              href={sub.href}
-                              onClick={onMobileClose}
-                              className={`block rounded-lg py-2 px-3 text-[13px] font-medium transition-all ${isSubActive
-                                ? "text-primary bg-primary/5 font-black"
-                                : "text-gray-500 hover:text-white hover:bg-white/5"
-                                }`}
-                            >
-                              {sub.label}
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                    {/* Submenu */}
+                    {item.submenu && isOpen && isExpanded && (
+                      <ul className="mt-1 space-y-1 ml-4 border-l border-white/10 pl-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        {item.submenu.map((sub) => {
+                          const isSubActive = isActive(sub.href);
+                          return (
+                            <li key={sub.label}>
+                              <Link
+                                href={sub.href}
+                                onClick={onMobileClose}
+                                className={`block rounded-lg py-2 px-3 text-[13px] font-medium transition-all ${isSubActive
+                                  ? "text-primary bg-primary/5 font-black"
+                                  : "text-gray-500 hover:text-white hover:bg-white/5"
+                                  }`}
+                              >
+                                {sub.label}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </nav>
 
 
@@ -555,43 +602,41 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
             </div>
 
             {/* Quick Add */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowQuickAdd(!showQuickAdd)}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
-                aria-label="Open quick add menu"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
-              {showQuickAdd && isExpanded && (
-                <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 w-48 rounded-2xl bg-secondary shadow-2xl border border-white/10 p-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                  {filteredQuickAddItems.map((item) => (
-                    <Link
-                      key={item.label}
-                      href={item.href}
-                      onClick={onMobileClose}
-                      className="block px-3 py-2.5 rounded-xl text-xs text-gray-400 hover:bg-white/5 hover:text-white transition-all"
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
+            {userRole !== "super_admin" && filteredQuickAddItems.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAdd(!showQuickAdd)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
+                  aria-label="Open quick add menu"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+                {showQuickAdd && isExpanded && (
+                  <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 w-48 rounded-2xl bg-secondary shadow-2xl border border-white/10 p-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                    {filteredQuickAddItems.map((item) => (
+                      <Link
+                        key={item.label}
+                        href={item.href}
+                        onClick={onMobileClose}
+                        className="block px-3 py-2.5 rounded-xl text-xs text-gray-400 hover:bg-white/5 hover:text-white transition-all"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Notifications */}
-            <button type="button" className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gray-700/50 text-gray-400 hover:text-white transition-all" aria-label="Open notifications">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#151e2d]"></span>
-            </button>
-          </div>
-
-          {isExpanded && (
-            <div className="mt-4 pt-3 border-t border-white/5 text-center">
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Worksuite v3.0</p>
-            </div>
-          )}
+            {userRole !== "super_admin" && (
+              <button type="button" className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gray-700/50 text-gray-400 hover:text-white transition-all" aria-label="Open notifications">
+                <Bell className="h-5 w-5" />
+                <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#151e2d]"></span>
+              </button>
+            )}
+          </div>  
         </div>
       </aside>
     </>

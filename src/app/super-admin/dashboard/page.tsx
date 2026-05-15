@@ -65,7 +65,6 @@ export default function SuperAdminDashboard() {
                 { label: 'Active Branches', value: stats.activeBranches, icon: TrendingUp, color: 'bg-success' },
                 { label: 'Inactive Branches', value: stats.inactiveBranches, icon: AlertCircle, color: 'bg-warning' },
                 { label: 'Company Admins', value: stats.admins, icon: Users, color: 'bg-secondary' },
-                { label: 'Permission Groups', value: stats.permissionProfiles, icon: ShieldCheck, color: 'bg-primary' }
             ].map((stat, i) => (
                 <div key={i} className="white-box p-4 flex items-center">
                     <div className={`h-10 w-10 ${stat.color} text-white flex items-center justify-center rounded mr-4`}>

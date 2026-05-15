@@ -6,6 +6,8 @@ import {
   Building2,
   Check,
   Edit3,
+  Eye,
+  EyeOff,
   Filter,
   Plus,
   RefreshCw,
@@ -30,6 +32,7 @@ import {
   type PermissionKey,
   type PermissionModuleKey,
 } from "@/lib/auth-contract";
+import { emailPattern, validateAdminPassword } from "@/lib/admin-password";
 import { useToast } from "@/context/ToastContext";
 
 type Company = {
@@ -43,6 +46,7 @@ type AdminAccount = {
   id: number | string;
   name: string;
   email: string;
+  password?: string;
   role: "admin";
   company_id: number | string;
   company?: Company;
@@ -130,6 +134,18 @@ const getCompanyName = (company?: Company) => company?.company_name || company?.
 
 const getAdminCompanyId = (admin: AdminAccount) => String(admin.company_id || admin.company?.id || "");
 
+const sameId = (left?: number | string, right?: number | string) => String(left ?? "") === String(right ?? "");
+
+const getPermissionSignature = (permissions: PermissionKey[]) => normalizePermissions(permissions).sort().join("|");
+
+const getAdminRoleLabel = (permissions: PermissionKey[] = []) => {
+  const permissionSignature = getPermissionSignature(permissions);
+  const exactTemplate = permissionTemplates.find((template) => getPermissionSignature(template.permissions) === permissionSignature);
+  if (exactTemplate) return exactTemplate.label;
+  if (permissions.includes("*")) return "Full Access";
+  return "Custom Admin";
+};
+
 const hasPermission = (permissions: PermissionKey[], moduleKey: PermissionModuleKey, action: PermissionAction) => {
   const key = permissionKey(moduleKey, action);
   return permissions.includes("*") || permissions.includes(`${moduleKey}.*` as PermissionKey) || permissions.includes(key);
@@ -169,6 +185,8 @@ export default function SuperAdminAdminsPage() {
   const [deletingAdmin, setDeletingAdmin] = useState<AdminAccount | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<AdminFormState>(emptyForm);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -195,12 +213,31 @@ export default function SuperAdminAdminsPage() {
 
   const companyMap = useMemo(() => new Map(companies.map((company) => [String(company.id), company])), [companies]);
 
+  const selectedCompanyName = useMemo(() => {
+    const selectedCompany = companyMap.get(form.company_id) || (editingAdmin && sameId(getAdminCompanyId(editingAdmin), form.company_id) ? editingAdmin.company : undefined);
+    return getCompanyName(selectedCompany);
+  }, [companyMap, editingAdmin, form.company_id]);
+
+  const passwordValidationMessage = useMemo(
+    () =>
+      validateAdminPassword({
+        password: form.password,
+        required: !editingAdmin,
+        name: form.name,
+        email: form.email,
+        companyName: selectedCompanyName,
+      }),
+    [editingAdmin, form.email, form.name, form.password, selectedCompanyName],
+  );
+
+  const visiblePasswordError = passwordTouched && passwordValidationMessage;
+
   const filteredAdmins = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     return admins.filter((admin) => {
       const company = admin.company || companyMap.get(getAdminCompanyId(admin));
-      const text = `${admin.name} ${admin.email} ${getCompanyName(company)}`.toLowerCase();
+      const text = `${admin.name} ${admin.email} ${getCompanyName(company)} ${getAdminRoleLabel(admin.permissions || [])}`.toLowerCase();
       const searchMatch = !query || text.includes(query);
       const companyMatch = companyFilter === "all" || getAdminCompanyId(admin) === companyFilter;
       const statusMatch = statusFilter === "all" || admin.status === statusFilter;
@@ -220,15 +257,11 @@ export default function SuperAdminAdminsPage() {
     };
   }, [admins]);
 
-  const activeAdminsForCompany = (companyId: string) =>
-    admins.filter((admin) => getAdminCompanyId(admin) === companyId && admin.status === "active");
-
   const openCreateForm = () => {
     setEditingAdmin(null);
-    setForm({
-      ...emptyForm,
-      company_id: companyFilter !== "all" ? companyFilter : String(companies[0]?.id || ""),
-    });
+    setForm({ ...emptyForm });
+    setShowPassword(false);
+    setPasswordTouched(false);
     setFormOpen(true);
   };
 
@@ -237,11 +270,13 @@ export default function SuperAdminAdminsPage() {
     setForm({
       name: admin.name || "",
       email: admin.email || "",
-      password: "",
+      password: String(admin.password || ""),
       company_id: getAdminCompanyId(admin),
       status: admin.status || "active",
       permissions: normalizePermissions(admin.permissions || []),
     });
+    setShowPassword(false);
+    setPasswordTouched(false);
     setFormOpen(true);
   };
 
@@ -255,8 +290,18 @@ export default function SuperAdminAdminsPage() {
       showToast("Name, email, and company are required.", "error");
       return;
     }
+    if (!emailPattern.test(form.email.trim())) {
+      showToast("Enter a valid admin email address.", "error");
+      return;
+    }
     if (!editingAdmin && !form.password.trim()) {
+      setPasswordTouched(true);
       showToast("Temporary password is required for new admins.", "error");
+      return;
+    }
+    if (passwordValidationMessage) {
+      setPasswordTouched(true);
+      showToast(passwordValidationMessage, "error");
       return;
     }
 
@@ -269,16 +314,11 @@ export default function SuperAdminAdminsPage() {
     }
 
     const nextPermissions = normalizePermissions(form.permissions);
-    if (form.status === "inactive" && editingAdmin && activeAdminsForCompany(form.company_id).length <= 1 && editingAdmin.status === "active") {
-      showToast("Every company must keep at least one active admin.", "error");
-      return;
-    }
-
     setSaving(true);
     const payload = {
       name: form.name.trim(),
       email: form.email.trim(),
-      password: form.password || undefined,
+      password: form.password.trim() || undefined,
       role: "admin",
       company_id: form.company_id,
       status: form.status,
@@ -290,7 +330,7 @@ export default function SuperAdminAdminsPage() {
       if (editingAdmin) {
         const response = await api.put(`/admins/${editingAdmin.id}`, payload);
         const updated = response.data.data || { ...editingAdmin, ...payload };
-        setAdmins((current) => current.map((admin) => (admin.id === editingAdmin.id ? updated : admin)));
+        setAdmins((current) => current.map((admin) => (sameId(admin.id, editingAdmin.id) ? updated : admin)));
         showToast("Admin access updated successfully.");
       } else {
         const response = await api.post("/admins", payload);
@@ -310,15 +350,11 @@ export default function SuperAdminAdminsPage() {
 
   const handleStatusToggle = async (admin: AdminAccount) => {
     const nextStatus = admin.status === "active" ? "inactive" : "active";
-    if (nextStatus === "inactive" && activeAdminsForCompany(getAdminCompanyId(admin)).length <= 1) {
-      showToast("Every company must keep at least one active admin.", "error");
-      return;
-    }
 
     try {
       const response = await api.put(`/admins/${admin.id}`, { ...admin, status: nextStatus });
       const updated = response.data.data || { ...admin, status: nextStatus };
-      setAdmins((current) => current.map((item) => (item.id === admin.id ? updated : item)));
+      setAdmins((current) => current.map((item) => (sameId(item.id, admin.id) ? updated : item)));
       showToast(`Admin ${nextStatus === "active" ? "activated" : "deactivated"}.`);
     } catch (error) {
       console.error("Status update failed:", error);
@@ -328,15 +364,10 @@ export default function SuperAdminAdminsPage() {
 
   const handleDelete = async () => {
     if (!deletingAdmin) return;
-    if (deletingAdmin.status === "active" && activeAdminsForCompany(getAdminCompanyId(deletingAdmin)).length <= 1) {
-      showToast("Every company must keep at least one active admin.", "error");
-      setDeletingAdmin(null);
-      return;
-    }
 
     try {
       await api.delete(`/admins/${deletingAdmin.id}`);
-      setAdmins((current) => current.filter((admin) => admin.id !== deletingAdmin.id));
+      setAdmins((current) => current.filter((admin) => !sameId(admin.id, deletingAdmin.id)));
       showToast("Admin deleted successfully.");
     } catch (error) {
       console.error("Delete admin failed:", error);
@@ -442,6 +473,7 @@ export default function SuperAdminAdminsPage() {
                 <tr>
                   <th className="min-w-64 px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Admin</th>
                   <th className="min-w-52 px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Company</th>
+                  <th className="min-w-40 px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Role</th>
                   <th className="min-w-56 px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Modules</th>
                   <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-500">Status</th>
                   <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-widest text-gray-500">Action</th>
@@ -451,6 +483,7 @@ export default function SuperAdminAdminsPage() {
                 {filteredAdmins.map((admin) => {
                   const company = admin.company || companyMap.get(getAdminCompanyId(admin));
                   const modules = getModulesFromPermissions(admin.permissions || []);
+                  const roleLabel = getAdminRoleLabel(admin.permissions || []);
                   return (
                     <tr key={admin.id} className="hover:bg-gray-50/60">
                       <td className="px-6 py-4">
@@ -469,6 +502,11 @@ export default function SuperAdminAdminsPage() {
                           <Building2 className="h-4 w-4 text-gray-400" />
                           {getCompanyName(company)}
                         </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-indigo-600">
+                          {roleLabel}
+                        </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex max-w-md flex-wrap gap-1.5">
@@ -494,7 +532,7 @@ export default function SuperAdminAdminsPage() {
                           <button
                             type="button"
                             onClick={() => handleStatusToggle(admin)}
-                            className="rounded-lg border border-gray-200 p-2 text-gray-500 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                            className="rounded-lg border border-gray-200 p-2 text-gray-500 transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary active:bg-primary/10"
                             title={admin.status === "active" ? "Deactivate admin" : "Activate admin"}
                           >
                             {admin.status === "active" ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
@@ -522,7 +560,7 @@ export default function SuperAdminAdminsPage() {
                 })}
                 {!loading && filteredAdmins.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-16 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    <td colSpan={6} className="py-16 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
                       No admins match this filter
                     </td>
                   </tr>
@@ -535,12 +573,13 @@ export default function SuperAdminAdminsPage() {
       </div>
 
       <Modal isOpen={formOpen} onClose={() => setFormOpen(false)} title={editingAdmin ? "Edit Admin" : "Create Admin"} size="xl">
-        <form onSubmit={handleSave} className="space-y-6">
+        <form key={editingAdmin ? `edit-admin-${editingAdmin.id}` : "create-admin"} onSubmit={handleSave} noValidate autoComplete="off" className="space-y-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Name</label>
               <input
                 required
+                autoComplete="off"
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                 className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
@@ -551,6 +590,7 @@ export default function SuperAdminAdminsPage() {
               <input
                 required
                 type="email"
+                autoComplete="new-email"
                 value={form.email}
                 onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
                 className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
@@ -558,19 +598,27 @@ export default function SuperAdminAdminsPage() {
             </div>
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Company / Branch</label>
-              <select
-                required
-                value={form.company_id}
-                onChange={(event) => setForm((current) => ({ ...current, company_id: event.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
-              >
-                <option value="">Select Company</option>
-                {companies.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {getCompanyName(company)}
-                  </option>
-                ))}
-              </select>
+              {editingAdmin ? (
+                <input
+                  readOnly
+                  value={form.company_id ? selectedCompanyName : "Unassigned"}
+                  className="w-full cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs font-bold text-gray-500 outline-none"
+                />
+              ) : (
+                <select
+                  required
+                  value={form.company_id}
+                  onChange={(event) => setForm((current) => ({ ...current, company_id: event.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                >
+                  <option value="">Select Company</option>
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {getCompanyName(company)}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Status</label>
@@ -584,99 +632,44 @@ export default function SuperAdminAdminsPage() {
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Temporary Password</label>
-              <input
-                type="password"
-                required={!editingAdmin}
-                value={form.password}
-                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-gray-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
-                placeholder={editingAdmin ? "Leave blank to keep current password" : ""}
-              />
+              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-gray-400">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={form.password}
+                  onBlur={() => setPasswordTouched(true)}
+                  onChange={(event) => {
+                    setPasswordTouched(true);
+                    setForm((current) => ({ ...current, password: event.target.value }));
+                  }}
+                  className={`w-full rounded-xl border bg-white py-3 pl-4 pr-12 text-xs font-bold text-gray-700 outline-none transition focus:ring-2 ${
+                    visiblePasswordError
+                      ? "border-red-300 focus:border-red-400 focus:ring-red-100"
+                      : "border-gray-200 focus:border-primary focus:ring-primary/10"
+                  }`}
+                  placeholder={editingAdmin ? "Leave blank to keep current password" : "Minimum 8 characters"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {visiblePasswordError ? (
+                <p className="mt-1.5 text-[10px] font-bold text-red-500">{passwordValidationMessage}</p>
+              ) : (
+                <p className="mt-1.5 text-[10px] font-bold text-gray-400">
+                  {editingAdmin ? "Saved password is loaded here. Use the eye button to view it or type a new one." : "Use a unique password with 8 or more characters."}
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-gray-100">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3">
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-widest text-gray-700">Module Permissions</h3>
-                <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">{getModulesFromPermissions(form.permissions).length} modules selected</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {permissionTemplates.map((template) => (
-                  <button
-                    key={template.id}
-                    type="button"
-                    onClick={() => applyTemplate(template.permissions)}
-                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-widest text-gray-500 transition hover:border-primary/30 hover:text-primary"
-                  >
-                    {template.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="border-b border-gray-100 bg-white">
-                  <tr>
-                    <th className="min-w-56 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Module</th>
-                    {permissionActions.map((action) => (
-                      <th key={action} className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">
-                        {action}
-                      </th>
-                    ))}
-                    <th className="px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">All</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {adminAssignablePermissionModules.map((moduleItem) => {
-                    const enabledActions = moduleItem.actions.filter((action) => hasPermission(form.permissions, moduleItem.key, action));
-                    const moduleFullyEnabled = enabledActions.length === moduleItem.actions.length;
-
-                    return (
-                      <tr key={moduleItem.key} className="hover:bg-gray-50/60">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-gray-700">{moduleItem.label}</p>
-                            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">{moduleItem.group}</p>
-                          </div>
-                        </td>
-                        {permissionActions.map((action) => {
-                          const allowed = moduleItem.actions.includes(action);
-                          const checked = allowed && hasPermission(form.permissions, moduleItem.key, action);
-                          return (
-                            <td key={action} className="px-3 py-3 text-center">
-                              {allowed ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setForm((current) => ({ ...current, permissions: togglePermission(current.permissions, moduleItem.key, action) }))}
-                                  className={`mx-auto flex h-7 w-12 items-center rounded-full p-1 transition-colors ${checked ? "bg-primary" : "bg-gray-200"} hover:ring-2 hover:ring-primary/20`}
-                                  aria-label={`${checked ? "Disable" : "Enable"} ${moduleItem.label} ${action}`}
-                                >
-                                  <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : ""}`} />
-                                </button>
-                              ) : (
-                                <span className="text-gray-200">-</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => setForm((current) => ({ ...current, permissions: setModulePermissions(current.permissions, moduleItem.key, !moduleFullyEnabled) }))}
-                            className={`mx-auto rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-widest transition ${moduleFullyEnabled ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
-                          >
-                            {moduleFullyEnabled ? "On" : "Off"}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
 
           <div className="flex flex-wrap justify-end gap-3 border-t border-gray-100 pt-5">
             <Button type="button" onClick={() => setFormOpen(false)} className="h-10 border-none bg-gray-100 px-5 text-gray-600">

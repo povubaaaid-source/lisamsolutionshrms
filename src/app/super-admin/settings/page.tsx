@@ -30,7 +30,7 @@ export default function SuperAdminSettingsPage() {
     { id: 'payment', label: 'Payment Settings', icon: CreditCard },
     { id: 'theme', label: 'Theme Settings', icon: Layout },
     { id: 'auth', label: 'Auth Settings', icon: Shield },
-    { id: 'language', label: 'Language Settings', icon: Languages },
+    // { id: 'language', label: 'Language Settings', icon: Languages },
   ];
 
   const addPlatformAdmin = async () => {

@@ -1,11 +1,9 @@
 "use client";
 
-import { Bell, Search, Power, ChevronDown, User, LogIn, Timer, Menu, RefreshCw, Briefcase, Activity } from "lucide-react";
+import { Bell, Search, Power, ChevronDown, User, LogIn, Timer, Menu, RefreshCw, Briefcase } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
-import { useRouter } from "next/navigation";
-import type { AuthUser } from "@/lib/auth-contract";
 import { useAuth } from "@/context/AuthContext";
 
 type SearchItem = {
@@ -24,7 +22,6 @@ interface NavbarProps {
 export default function Navbar({ onMenuClick }: NavbarProps) {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const router = useRouter();
   const { user, logout } = useAuth();
   
   // Search State
@@ -96,6 +93,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const displayName = user?.name || "Admin";
   const displayEmail = user?.email || "admin@company.com";
   const displayRole = (user?.role || "admin").replace("_", " ");
+  const showOperationalHeaderWidgets = user?.role !== "super_admin";
 
   return (
     <header className="sticky top-0 z-40 flex h-[60px] w-full items-center justify-between bg-white px-6 text-gray-800 border-b border-[#f2f2f3]">
@@ -114,7 +112,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
         <div className="relative hidden md:block group" ref={searchRef}>
           <input
             type="text"
-            placeholder="Search anything..."
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => searchQuery.length > 1 && setShowResults(true)}
@@ -221,21 +219,25 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
 
       {/* Right side: timer, notifications, user */}
       <div className="flex items-center space-x-3">
-        {/* Active Timer */}
-        <button className="hidden lg:flex items-center space-x-2 rounded-xl border border-gray-100 bg-gray-50/50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-white hover:shadow-sm transition-all">
-          <Timer className="h-3.5 w-3.5 text-primary" />
-          <span>Active Timers</span>
-          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] font-black text-white">0</span>
-        </button>
+        {showOperationalHeaderWidgets && (
+          <>
+            {/* Active Timer */}
+            <button className="hidden lg:flex items-center space-x-2 rounded-xl border border-gray-100 bg-gray-50/50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-white hover:shadow-sm transition-all">
+              <Timer className="h-3.5 w-3.5 text-primary" />
+              <span>Active Timers</span>
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] font-black text-white">0</span>
+            </button>
 
-        {/* Biometric Heartbeat */}
-        <div className="hidden xl:flex items-center space-x-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
-           <div className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
-           </div>
-           <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Gateway Active</span>
-        </div>
+            {/* Biometric Heartbeat */}
+            <div className="hidden xl:flex items-center space-x-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-2">
+              <div className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
+              </div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Gateway Active</span>
+            </div>
+          </>
+        )}
 
         {/* Notifications */}
         <div className="relative">

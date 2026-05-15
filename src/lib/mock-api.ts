@@ -1308,10 +1308,14 @@ const normalizePermissionList = (value: unknown, fallback: PermissionKey[] = rol
 };
 
 const makeAdminPayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
-  const { password: _password, ...safePayload } = payload;
+  const safePayload = { ...payload };
+  delete safePayload.password;
   const companyId = getNestedId(payload.company) || payload.company_id || existing?.company_id || 1;
   const company = store.companies.find((record) => String(record.id) === String(companyId));
   const permissions = normalizePermissionList(payload.permissions, normalizePermissionList(existing?.permissions, rolePermissions.admin));
+  const nextPassword = typeof payload.password === "string" && payload.password.trim()
+    ? payload.password.trim()
+    : String(existing?.password || "");
 
   return {
     ...(existing || {}),
@@ -1329,6 +1333,7 @@ const makeAdminPayload = (store: MockStore, payload: Record<string, unknown>, id
         }
       : payload.company || existing?.company,
     status: String(payload.status || existing?.status || "active"),
+    password: nextPassword,
     permissions,
     modules: getModulesFromPermissions(permissions),
     last_login_at: existing?.last_login_at || null,

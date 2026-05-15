@@ -227,6 +227,8 @@ export const rolePermissions: Record<UserRole, PermissionKey[]> = {
 
 const publicPathPrefixes = ["/", "/login", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/unauthorized"];
 
+const disabledPathPrefixes = ["/faqs", "/employees/faq", "/employee-faq", "/employee-faq-category", "/search"];
+
 type RoleRouteRule = {
   prefixes: string[];
   roles: UserRole[];
@@ -361,10 +363,14 @@ export const normalizeRole = (role?: string | null): UserRole => {
 export const isPublicPath = (pathname: string) =>
   publicPathPrefixes.some((prefix) => pathname === prefix || (prefix !== "/" && pathname.startsWith(`${prefix}/`)));
 
+export const isDisabledPath = (pathname: string) =>
+  disabledPathPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
 export const getDefaultRouteForRole = (role?: string | null) => roleDefaultRoutes[normalizeRole(role)];
 
 export const canRoleAccessPath = (role: UserRole, pathname: string) => {
   if (isPublicPath(pathname)) return true;
+  if (isDisabledPath(pathname)) return false;
   if (!isSaasBillingEnabled && isSaasBillingPath(pathname)) return false;
 
   const matchedRule = roleRouteRules.find((rule) =>
