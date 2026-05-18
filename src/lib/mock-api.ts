@@ -4,7 +4,6 @@ import {
   buildSalarySlip,
   canGeneratePayrollForEmployee,
   employeeIdOf,
-  getEmployeeMonthlySalary,
   getMonthRange,
   monthName,
   roundMoney,
@@ -1317,7 +1316,8 @@ const normalizePermissionList = (value: unknown, fallback: PermissionKey[] = rol
 };
 
 const makeAdminPayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
-  const { password: _password, ...safePayload } = payload;
+  const safePayload = { ...payload };
+  delete safePayload.password;
   const companyId = getNestedId(payload.company) || payload.company_id || existing?.company_id || 1;
   const company = store.companies.find((record) => String(record.id) === String(companyId));
   const permissions = normalizePermissionList(payload.permissions, normalizePermissionList(existing?.permissions, rolePermissions.admin));
@@ -1992,6 +1992,28 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
   }
 
   const records = getResourceRecords(store, resource);
+
+  if (resource === "employees" && method === "post" && id === "assignRole") {
+    const employeeId = payload.user_id || payload.employee_id || payload.id;
+    const role = normalizeRole(String(payload.role || "employee")) === "admin" ? "admin" : "employee";
+    const permissions = normalizePermissionList(payload.permissions, rolePermissions[role]);
+    const modules = Array.isArray(payload.modules) ? payload.modules.map((module) => String(module)) : getModulesFromPermissions(permissions);
+    const updatedRecords = records.map((record) =>
+      String(record.id) === String(employeeId)
+        ? {
+            ...record,
+            role,
+            permissions,
+            modules,
+            updated_at: new Date().toISOString(),
+          }
+        : record,
+    );
+
+    setResourceRecords(store, resource, updatedRecords);
+    const updated = updatedRecords.find((record) => String(record.id) === String(employeeId));
+    return jsonResponse(config, updated ? 200 : 404, updated ? apiEnvelope(updated, "Role assigned successfully") : { success: false, message: "Employee not found" });
+  }
 
   if (resource === "companies" && method === "post" && id && action === "login") {
     if (!requireRole(config, "super_admin")) {

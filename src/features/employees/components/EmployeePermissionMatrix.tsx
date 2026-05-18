@@ -1,0 +1,212 @@
+"use client";
+
+import {
+  adminAssignablePermissionModules,
+  getModulesFromPermissions,
+  permissionActions,
+  permissionKey,
+  rolePermissions,
+  type PermissionAction,
+  type PermissionKey,
+  type PermissionModuleDefinition,
+} from "@/lib/auth-contract";
+
+export type EmployeeAssignableRole = "admin" | "employee";
+
+type PermissionTemplate = {
+  id: string;
+  label: string;
+  role: EmployeeAssignableRole;
+  permissions: PermissionKey[];
+};
+
+const permissionTemplates: PermissionTemplate[] = [
+  { id: "employee", label: "Employee", role: "employee", permissions: rolePermissions.employee },
+  {
+    id: "hr",
+    label: "HR Role",
+    role: "employee",
+    permissions: [
+      "dashboard.view",
+      "profile.*",
+      "employees.view",
+      "hr.view",
+      "attendance.view",
+      "attendance.create",
+      "leaves.view",
+      "leaves.create",
+      "reports.view",
+      "events.view",
+      "notices.view",
+    ],
+  },
+  {
+    id: "project",
+    label: "Project Role",
+    role: "employee",
+    permissions: [
+      "dashboard.view",
+      "profile.*",
+      "projects.view",
+      "tasks.*",
+      "tickets.*",
+      "messages.*",
+      "events.view",
+      "notices.view",
+    ],
+  },
+  { id: "admin", label: "Admin", role: "admin", permissions: rolePermissions.admin },
+];
+
+const normalizePermissions = (permissions: PermissionKey[]): PermissionKey[] =>
+  Array.from(new Set<PermissionKey>(["dashboard.view", "profile.*", ...permissions]));
+
+const getModuleActionKeys = (moduleItem: PermissionModuleDefinition) =>
+  moduleItem.actions.map((action) => permissionKey(moduleItem.key, action));
+
+const expandModuleWildcard = (permissions: PermissionKey[], moduleItem: PermissionModuleDefinition) => {
+  const wildcard = `${moduleItem.key}.*` as PermissionKey;
+  if (!permissions.includes(wildcard)) return permissions;
+  return [...permissions.filter((permission) => permission !== wildcard), ...getModuleActionKeys(moduleItem)];
+};
+
+const hasPermission = (permissions: PermissionKey[], moduleKey: string, action: PermissionAction) =>
+  permissions.includes("*") || permissions.includes(`${moduleKey}.*` as PermissionKey) || permissions.includes(permissionKey(moduleKey, action));
+
+const togglePermission = (permissions: PermissionKey[], moduleItem: PermissionModuleDefinition, action: PermissionAction) => {
+  const expandedPermissions = expandModuleWildcard(permissions, moduleItem);
+  const key = permissionKey(moduleItem.key, action);
+  return normalizePermissions(
+    expandedPermissions.includes(key)
+      ? expandedPermissions.filter((permission) => permission !== key)
+      : [...expandedPermissions, key],
+  );
+};
+
+const setModulePermissions = (permissions: PermissionKey[], moduleItem: PermissionModuleDefinition, enabled: boolean) => {
+  const moduleKeys = new Set<PermissionKey>([`${moduleItem.key}.*` as PermissionKey, ...getModuleActionKeys(moduleItem)]);
+  const nextPermissions = permissions.filter((permission) => !moduleKeys.has(permission));
+  return normalizePermissions(enabled ? [...nextPermissions, `${moduleItem.key}.*` as PermissionKey] : nextPermissions);
+};
+
+type EmployeePermissionMatrixProps = {
+  role: EmployeeAssignableRole;
+  permissions: PermissionKey[];
+  onRoleChange: (role: EmployeeAssignableRole) => void;
+  onPermissionsChange: (permissions: PermissionKey[]) => void;
+};
+
+export default function EmployeePermissionMatrix({
+  role,
+  permissions,
+  onRoleChange,
+  onPermissionsChange,
+}: EmployeePermissionMatrixProps) {
+  const normalizedPermissions = normalizePermissions(permissions);
+
+  const applyTemplate = (template: PermissionTemplate) => {
+    onRoleChange(template.role);
+    onPermissionsChange(normalizePermissions(template.permissions));
+  };
+
+  const handleRoleChange = (nextRole: EmployeeAssignableRole) => {
+    onRoleChange(nextRole);
+    onPermissionsChange(normalizePermissions(rolePermissions[nextRole]));
+  };
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 bg-gray-50 px-4 py-3">
+        <div>
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-700">Role & Module Permissions</h3>
+          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            {getModulesFromPermissions(normalizedPermissions).length} modules selected
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={role}
+            onChange={(event) => handleRoleChange(event.target.value as EmployeeAssignableRole)}
+            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-[10px] font-black uppercase tracking-widest text-gray-600 outline-none transition focus:border-primary/30 focus:text-primary"
+          >
+            <option value="employee">Employee Role</option>
+            <option value="admin">Admin Role</option>
+          </select>
+          {permissionTemplates.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              onClick={() => applyTemplate(template)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-widest text-gray-500 transition hover:border-primary/30 hover:text-primary focus:border-primary/30 focus:text-primary"
+            >
+              {template.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className="border-b border-gray-100 bg-white">
+            <tr>
+              <th className="min-w-56 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Module</th>
+              {permissionActions.map((action) => (
+                <th key={action} className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">
+                  {action}
+                </th>
+              ))}
+              <th className="px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-500">All</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {adminAssignablePermissionModules.map((moduleItem) => {
+              const enabledActions = moduleItem.actions.filter((action) => hasPermission(normalizedPermissions, moduleItem.key, action));
+              const moduleFullyEnabled = enabledActions.length === moduleItem.actions.length;
+
+              return (
+                <tr key={moduleItem.key} className="hover:bg-gray-50/60">
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-gray-700">{moduleItem.label}</p>
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">{moduleItem.group}</p>
+                    </div>
+                  </td>
+                  {permissionActions.map((action) => {
+                    const allowed = moduleItem.actions.includes(action);
+                    const checked = allowed && hasPermission(normalizedPermissions, moduleItem.key, action);
+                    return (
+                      <td key={action} className="px-3 py-3 text-center">
+                        {allowed ? (
+                          <button
+                            type="button"
+                            onClick={() => onPermissionsChange(togglePermission(normalizedPermissions, moduleItem, action))}
+                            className={`mx-auto flex h-7 w-12 items-center rounded-full p-1 transition-colors ${checked ? "bg-primary" : "bg-gray-200"} hover:ring-2 hover:ring-primary/20`}
+                            aria-label={`${checked ? "Disable" : "Enable"} ${moduleItem.label} ${action}`}
+                          >
+                            <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : ""}`} />
+                          </button>
+                        ) : (
+                          <span className="text-gray-200">-</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => onPermissionsChange(setModulePermissions(normalizedPermissions, moduleItem, !moduleFullyEnabled))}
+                      className={`mx-auto rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-widest transition ${
+                        moduleFullyEnabled ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      }`}
+                    >
+                      {moduleFullyEnabled ? "On" : "Off"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

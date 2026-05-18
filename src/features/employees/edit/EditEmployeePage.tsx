@@ -10,21 +10,42 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/context/ToastContext";
-import { RefreshCw, Save, ArrowLeft, AlertCircle, Clock } from "lucide-react";
+import { RefreshCw, Save, ArrowLeft, AlertCircle, Clock, Eye, EyeOff } from "lucide-react";
 import { Employee } from "@/types";
+import { getModulesFromPermissions, rolePermissions, type PermissionKey } from "@/lib/auth-contract";
+import EmployeePermissionMatrix, { type EmployeeAssignableRole } from "@/features/employees/components/EmployeePermissionMatrix";
 
 const employeeSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  password: z.string().optional().or(z.literal("")),
+  password: z
+    .string()
+    .optional()
+    .refine((value) => !value || value.length >= 8, "Password must be at least 8 characters"),
   employee_id: z.string().min(1, "Employee ID is required"),
   joining_date: z.string().min(1, "Joining date is required"),
+  gender: z.string().min(1, "Please select gender"),
   department_id: z.string().min(1, "Please select a department"),
   designation_id: z.string().min(1, "Please select a designation"),
   shift_type_id: z.string().optional(),
   role: z.enum(["admin", "employee"]),
   mobile: z.string().optional(),
   address: z.string().optional(),
+}).superRefine((data, ctx) => {
+  const password = data.password?.trim().toLowerCase();
+  if (!password) return;
+
+  const blockedValues = [data.name, data.email, data.employee_id]
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (blockedValues.includes(password)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["password"],
+      message: "Password must be unique and cannot match name, email, or employee ID",
+    });
+  }
 });
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
@@ -50,8 +71,11 @@ type ShiftTypeOption = {
 type EmployeeUpdatePayload = {
   name: string;
   email: string;
-  role: "admin" | "employee";
+  role: EmployeeAssignableRole;
   password?: string;
+  gender: string;
+  permissions: PermissionKey[];
+  modules: string[];
   department_id: string;
   designation_id: string;
   shift_type_id?: string;
@@ -66,6 +90,11 @@ type EmployeeUpdatePayload = {
   };
 };
 
+type EmployeeWithAccess = Employee & {
+  permissions?: PermissionKey[];
+  modules?: string[];
+};
+
 export default function EditEmployeePage() {
   const params = useParams();
   const router = useRouter();
@@ -76,14 +105,23 @@ export default function EditEmployeePage() {
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [designations, setDesignations] = useState<DesignationOption[]>([]);
   const [shiftTypes, setShiftTypes] = useState<ShiftTypeOption[]>([]);
+  const [showPassword, setShowPassword] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<EmployeeAssignableRole>("employee");
+  const [permissionState, setPermissionState] = useState<PermissionKey[]>(rolePermissions.employee);
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
+    defaultValues: {
+      role: "employee",
+      gender: "",
+      password: "",
+    },
   });
 
   useEffect(() => {
@@ -96,8 +134,12 @@ export default function EditEmployeePage() {
           api.get("/shift-types"),
         ]);
 
-        const data = empRes.data.data as Employee;
+        const data = empRes.data.data as EmployeeWithAccess;
+        const role = data.role === "admin" ? "admin" : "employee";
+        const permissions = Array.isArray(data.permissions) ? data.permissions : rolePermissions[role];
         setEmployee(data);
+        setSelectedRole(role);
+        setPermissionState(permissions);
         setDepartments(deptRes.data.data || []);
         setDesignations(desigRes.data.data || []);
         setShiftTypes(shiftRes.data.data || []);
@@ -107,10 +149,12 @@ export default function EditEmployeePage() {
           email: data.email,
           employee_id: data.employee_detail?.employee_id || "",
           joining_date: data.employee_detail?.joining_date || "",
+          gender: data.gender || "",
           department_id: data.employee_detail?.department_id?.toString() || "",
           designation_id: data.employee_detail?.designation_id?.toString() || "",
           shift_type_id: data.employee_detail?.shift_type_id?.toString() || "",
-          role: data.role === "admin" ? "admin" : "employee",
+          role,
+          password: "",
           mobile: data.employee_detail?.mobile || "",
           address: data.employee_detail?.address || "",
         });
@@ -126,23 +170,28 @@ export default function EditEmployeePage() {
 
   const onSubmit = async (data: EmployeeFormValues) => {
     setSaving(true);
-      try {
+    try {
+      const permissions = permissionState;
+      const modules = getModulesFromPermissions(permissions);
       const payload: EmployeeUpdatePayload = {
         name: data.name,
         email: data.email,
         role: data.role,
+        gender: data.gender,
+        permissions,
+        modules,
         department_id: data.department_id,
         designation_id: data.designation_id,
         shift_type_id: data.shift_type_id,
         employee_detail: {
           employee_id: data.employee_id,
           joining_date: data.joining_date,
-            department_id: data.department_id,
-            designation_id: data.designation_id,
-            shift_type_id: data.shift_type_id,
-            mobile: data.mobile,
-          address: data.address
-        }
+          department_id: data.department_id,
+          designation_id: data.designation_id,
+          shift_type_id: data.shift_type_id,
+          mobile: data.mobile,
+          address: data.address,
+        },
       };
       
       if (data.password) {
@@ -153,6 +202,8 @@ export default function EditEmployeePage() {
       await api.post("/employees/assignRole", {
         user_id: params.id,
         role: data.role,
+        permissions,
+        modules,
       });
       showToast("Employee updated successfully!");
       router.push(`/employees/${params.id}`);
@@ -247,6 +298,18 @@ export default function EditEmployeePage() {
                        />
                     </div>
                     <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Gender <span className="text-red-500">*</span></label>
+                       <select
+                          {...register("gender")}
+                          className={`w-full bg-gray-50 border-none rounded-xl p-3 text-xs font-bold focus:ring-1 outline-none appearance-none cursor-pointer ${errors.gender ? "ring-1 ring-red-500" : "focus:ring-primary"}`}
+                       >
+                          <option value="">Select Gender</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                       </select>
+                       {errors.gender && <p className="text-[9px] text-red-500 mt-1 font-bold">{errors.gender.message}</p>}
+                    </div>
+                    <div className="space-y-1.5">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Employee ID <span className="text-red-500">*</span></label>
                        <input 
                           type="text" 
@@ -323,6 +386,18 @@ export default function EditEmployeePage() {
                  </div>
               </Card>
 
+              <Card className="border-none shadow-sm p-0 bg-white rounded-2xl overflow-hidden">
+                 <EmployeePermissionMatrix
+                    role={selectedRole}
+                    permissions={permissionState}
+                    onRoleChange={(role) => {
+                      setSelectedRole(role);
+                      setValue("role", role, { shouldDirty: true, shouldValidate: true });
+                      setPermissionState(rolePermissions[role]);
+                    }}
+                    onPermissionsChange={setPermissionState}
+                 />
+              </Card>
 
            </div>
 
@@ -336,12 +411,25 @@ export default function EditEmployeePage() {
                  </div>
                  <div className="space-y-1.5 text-left">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Update Password</label>
-                    <input 
-                        type="password" 
-                        placeholder="Leave blank to keep"
-                        {...register("password")}
-                        className="w-full bg-gray-50 border-none rounded-xl p-3 text-xs font-bold focus:ring-1 focus:ring-primary outline-none" 
-                    />
+                    <div className="relative">
+                       <input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Leave blank to keep"
+                          {...register("password")}
+                          className={`w-full bg-gray-50 border-none rounded-xl p-3 pr-11 text-xs font-bold focus:ring-1 outline-none ${
+                            errors.password ? "ring-1 ring-red-500" : "focus:ring-primary"
+                          }`}
+                       />
+                       <button
+                          type="button"
+                          onClick={() => setShowPassword((current) => !current)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 transition hover:text-primary"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                       >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                       </button>
+                    </div>
+                    {errors.password && <p className="text-[9px] text-red-500 mt-1 font-bold">{errors.password.message}</p>}
                  </div>
               </Card>
 

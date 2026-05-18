@@ -9,7 +9,6 @@ import {
   User, 
   Mail, 
   Lock, 
-  MessageSquare, 
   Calendar, 
   MapPin, 
   Hash, 
@@ -19,7 +18,9 @@ import {
   Info,
   ChevronDown,
   RefreshCw,
-  Clock
+  Clock,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Button from "@/components/ui/Button";
@@ -27,6 +28,30 @@ import Card from "@/components/ui/Card";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
+import { getModulesFromPermissions, rolePermissions, type PermissionKey } from "@/lib/auth-contract";
+import EmployeePermissionMatrix, { type EmployeeAssignableRole } from "@/features/employees/components/EmployeePermissionMatrix";
+
+const validateEmployeePassword = (password: string, name: string, email: string, employeeId: string) => {
+  const trimmedPassword = password.trim();
+  if (!trimmedPassword) return "Password is required.";
+  if (trimmedPassword.length < 8) return "Password must be at least 8 characters.";
+
+  const normalizedPassword = trimmedPassword.toLowerCase();
+  const blockedValues = [name, email, employeeId]
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (blockedValues.includes(normalizedPassword)) {
+    return "Password must be unique and cannot match name, email, or employee ID.";
+  }
+
+  return "";
+};
+
+const generatePassword = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+};
 
 export default function CreateEmployeePage() {
   const { showToast } = useToast();
@@ -56,7 +81,7 @@ export default function CreateEmployeePage() {
   const [designations, setDesignations] = useState<DesignationOption[]>([]);
   const [shiftTypes, setShiftTypes] = useState<ShiftTypeOption[]>([]);
 
-  // Form State parity with Laravel
+  // Form State
   const [formData, setFormData] = useState({
     employee_id: "",
     name: "",
@@ -65,7 +90,7 @@ export default function CreateEmployeePage() {
     slack_username: "",
     joining_date: new Date().toISOString().split('T')[0],
     last_date: "",
-    gender: "male",
+    gender: "",
     address: "",
     tags: "",
     designation: "",
@@ -74,13 +99,19 @@ export default function CreateEmployeePage() {
     phone_code: "+1",
     mobile: "",
     hourly_rate: "",
-    role: "employee",
+    role: "employee" as EmployeeAssignableRole,
+    permissions: rolePermissions.employee as PermissionKey[],
     login: "enable",
     email_notifications: "1",
     locale: "en"
   });
 
   const [generateRandom, setGenerateRandom] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  const passwordValidationMessage = validateEmployeePassword(formData.password, formData.name, formData.email, formData.employee_id);
+  const visiblePasswordError = passwordTouched && passwordValidationMessage;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -130,20 +161,37 @@ export default function CreateEmployeePage() {
     const isChecked = !generateRandom;
     setGenerateRandom(isChecked);
     if (isChecked) {
-      const rand = Math.random().toString(36).slice(-8);
-      setFormData(prev => ({ ...prev, password: rand }));
+      setFormData(prev => ({ ...prev, password: generatePassword() }));
+      setShowPassword(true);
+      setPasswordTouched(true);
     } else {
       setFormData(prev => ({ ...prev, password: "" }));
+      setShowPassword(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPasswordTouched(true);
+
+    const passwordError = validateEmployeePassword(formData.password, formData.name, formData.email, formData.employee_id);
+    if (passwordError) {
+      showToast(passwordError, "error");
+      return;
+    }
+
+    if (!formData.gender) {
+      showToast("Select employee gender.", "error");
+      return;
+    }
+
     setLoading(true);
     try {
       const selectedDesignation = designations.find((designation) => String(designation.id) === String(formData.designation));
       const selectedDepartment = departments.find((department) => String(department.id) === String(formData.department));
       const selectedShift = shiftTypes.find((shift) => String(shift.id) === String(formData.shift_type_id));
+      const permissions = formData.permissions;
+      const modules = getModulesFromPermissions(permissions);
       const payload = {
         ...formData,
         designation_id: formData.designation,
@@ -153,6 +201,8 @@ export default function CreateEmployeePage() {
         department_name: selectedDepartment?.team_name || "",
         shift_type_id: formData.shift_type_id || null,
         shift_type: selectedShift || null,
+        permissions,
+        modules,
         employee_detail: {
           employee_id: formData.employee_id,
           address: formData.address,
@@ -173,6 +223,8 @@ export default function CreateEmployeePage() {
         await api.post("/employees/assignRole", {
           user_id: createdEmployeeId,
           role: formData.role,
+          permissions,
+          modules,
         });
       }
       showToast("Employee created successfully!", "success");
@@ -279,14 +331,29 @@ export default function CreateEmployeePage() {
                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                        <input 
                          name="password"
-                         type={generateRandom ? "text" : "password"}
+                         type={showPassword ? "text" : "password"}
                          readOnly={generateRandom}
                          value={formData.password}
-                         onChange={handleInputChange}
-                         placeholder="••••••••"
-                         className="w-full bg-gray-50 border-none rounded-xl py-3.5 pl-12 pr-4 text-xs font-black uppercase tracking-tight outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                         onBlur={() => setPasswordTouched(true)}
+                         onChange={(event) => {
+                           setPasswordTouched(true);
+                           handleInputChange(event);
+                         }}
+                         placeholder="Minimum 8 characters"
+                         className={`w-full bg-gray-50 border-none rounded-xl py-3.5 pl-12 pr-12 text-xs font-black tracking-tight outline-none focus:ring-2 transition-all ${
+                           visiblePasswordError ? "ring-2 ring-red-100 focus:ring-red-200" : "focus:ring-primary/20"
+                         }`}
                        />
+                       <button
+                         type="button"
+                         onClick={() => setShowPassword((current) => !current)}
+                         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 transition hover:text-primary"
+                         aria-label={showPassword ? "Hide password" : "Show password"}
+                       >
+                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                       </button>
                     </div>
+                    {visiblePasswordError && <p className="text-[9px] font-bold text-red-500">{passwordValidationMessage}</p>}
                  </div>
 
                  <div className="space-y-2">
@@ -294,29 +361,16 @@ export default function CreateEmployeePage() {
                     <div className="relative">
                        <select 
                          name="gender"
+                         required
                          value={formData.gender}
                          onChange={handleInputChange}
                          className="w-full bg-gray-50 border-none rounded-xl py-3.5 px-4 text-xs font-black uppercase tracking-tight outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer"
                        >
+                          <option value="">Select Gender</option>
                           <option value="male">Male</option>
                           <option value="female">Female</option>
-                          <option value="others">Others</option>
                        </select>
                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300 pointer-events-none" />
-                    </div>
-                 </div>
-
-                 <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Slack Username</label>
-                    <div className="relative">
-                       <MessageSquare className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
-                       <input 
-                         name="slack_username"
-                         value={formData.slack_username}
-                         onChange={handleInputChange}
-                         placeholder="USER_001"
-                         className="w-full bg-gray-50 border-none rounded-xl py-3.5 pl-12 pr-4 text-xs font-black uppercase tracking-tight outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                       />
                     </div>
                  </div>
               </div>
@@ -529,6 +583,15 @@ export default function CreateEmployeePage() {
                     </div>
                  </div>
               </div>
+           </Card>
+
+           <Card className="p-0 border-none shadow-sm bg-white rounded-2xl overflow-hidden">
+              <EmployeePermissionMatrix
+                role={formData.role}
+                permissions={formData.permissions}
+                onRoleChange={(role) => setFormData((current) => ({ ...current, role, permissions: rolePermissions[role] }))}
+                onPermissionsChange={(permissions) => setFormData((current) => ({ ...current, permissions }))}
+              />
            </Card>
 
            {/* Submit Action */}
