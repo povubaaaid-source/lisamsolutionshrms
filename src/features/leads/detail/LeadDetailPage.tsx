@@ -235,27 +235,49 @@ export default function LeadDetailPage() {
     };
   }, [lead]);
 
+  const updateLead = async (patch: Record<string, unknown>, successMessage: string) => {
+    if (!lead) return;
+    try {
+      const response = await api.put(`/lead/${lead.id}`, { ...lead, ...patch });
+      setLead(response.data.data as Lead);
+      showToast(successMessage, "success");
+    } catch (err) {
+      console.error("Update Lead Detail Error:", err);
+      showToast("Lead change saved locally but backend persistence failed.", "error");
+    }
+  };
+
   const addFollowUp = () => {
     if (!nextFollowUpDate && !followUpRemark.trim()) return;
-    setFollowups((current) => [
-      {
-        id: `local-followup-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        next_follow_up_date: nextFollowUpDate,
-        remark: followUpRemark.trim() || "No remark added.",
-        user: { name: "Current user" },
-      },
-      ...current,
-    ]);
+    const nextFollowUp = {
+      id: `local-followup-${Date.now()}`,
+      created_at: new Date().toISOString(),
+      next_follow_up_date: nextFollowUpDate,
+      remark: followUpRemark.trim() || "No remark added.",
+      user: { name: "Current user" },
+    };
+    const nextFollowups = [nextFollowUp, ...followups];
+    setFollowups(nextFollowups);
     setNextFollowUpDate("");
     setFollowUpRemark("");
+    void updateLead({ followups: nextFollowups }, "Follow-up added");
   };
 
   const removeFollowUp = (followUpId: number | string) => {
-    setFollowups((current) => current.filter((followUp) => (followUp.id || followUp.created_at || followUp.remark) !== followUpId));
+    const nextFollowups = followups.filter((followUp) => (followUp.id || followUp.created_at || followUp.remark) !== followUpId);
+    setFollowups(nextFollowups);
+    void updateLead({ followups: nextFollowups }, "Follow-up removed");
   };
 
   const handleLeadAction = (action: string) => {
+    if (action.toLowerCase().includes("convert")) {
+      void updateLead({ status: "Converted" }, "Lead marked as converted");
+      return;
+    }
+    if (action.toLowerCase().includes("accept")) {
+      void updateLead({ status: "In Process" }, "Lead accepted");
+      return;
+    }
     showToast(`${action} is ready for backend integration.`, "success");
   };
 

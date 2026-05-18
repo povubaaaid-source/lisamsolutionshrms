@@ -18,6 +18,10 @@ type CreateLeadPayload = {
   client_name: string;
   client_email: string;
   company_name: string;
+  mobile?: string;
+  website?: string;
+  address?: string;
+  description?: string;
   value?: number;
   source_id?: string;
   status_id?: string;
@@ -44,6 +48,10 @@ export default function CreateLeadPage() {
     client_name: "",
     client_email: "",
     company_name: "",
+    mobile: "",
+    website: "",
+    address: "",
+    description: "",
     source_id: "",
     status_id: "",
     value: "",
@@ -61,7 +69,7 @@ export default function CreateLeadPage() {
       } catch (err) {
         console.error("Failed to fetch lead options, using mock fallback:", err);
         setSources([{ id: 1, type: "Website" }, { id: 2, type: "Referral" }]);
-        setStatuses([{ id: 1, type: "Pending" }, { id: 2, type: "In Process" }]);
+        setStatuses([{ id: 1, type: "New Lead" }, { id: 2, type: "In Process" }]);
       } finally {
         setLoadingOptions(false);
       }
@@ -85,18 +93,13 @@ export default function CreateLeadPage() {
         company_name: formData.company_name,
       };
       
+      if (formData.mobile) payload.mobile = formData.mobile;
+      if (formData.website) payload.website = formData.website;
+      if (formData.address) payload.address = formData.address;
+      if (formData.description) payload.description = formData.description;
       if (formData.value) payload.value = parseFloat(formData.value);
       if (formData.source_id) payload.source_id = formData.source_id;
       if (formData.status_id) payload.status_id = formData.status_id;
-
-      // Mock testing bypass
-      if (localStorage.getItem("token") === "mock_token_12345") {
-        setTimeout(() => {
-          router.push("/leads");
-          router.refresh();
-        }, 800);
-        return;
-      }
 
       await api.post("/lead", payload);
       router.push("/leads");
@@ -184,6 +187,28 @@ export default function CreateLeadPage() {
               </div>
 
               <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Phone Number</label>
+                <input
+                  name="mobile"
+                  value={formData.mobile}
+                  onChange={handleChange}
+                  type="text"
+                  className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Website</label>
+                <input
+                  name="website"
+                  value={formData.website}
+                  onChange={handleChange}
+                  type="url"
+                  className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Lead Source</label>
                 <select 
                   name="source_id"
@@ -222,6 +247,27 @@ export default function CreateLeadPage() {
                   type="number" 
                   step="0.01"
                   className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all" 
+                />
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Address</label>
+                <input
+                  name="address"
+                  value={formData.address}
+                  onChange={handleChange}
+                  type="text"
+                  className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Requirements</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={(event) => setFormData({ ...formData, description: event.target.value })}
+                  className="w-full border-gray-200 rounded p-2.5 text-xs font-bold focus:ring-1 focus:ring-primary/20 outline-none transition-all min-h-28"
                 />
               </div>
 

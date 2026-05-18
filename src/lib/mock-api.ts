@@ -18,6 +18,8 @@ type MockRecord = Record<string, unknown> & { id: number | string };
 type MockStore = Record<string, MockRecord[]>;
 
 const STORAGE_KEY = "worksuite_mock_api_store";
+const STORE_SCHEMA_VERSION = "leads-v1";
+const STORE_VERSION_KEY = `${STORAGE_KEY}:schema`;
 const NETWORK_DELAY_MS = 120;
 
 const now = new Date("2026-05-08T09:00:00+05:00").toISOString();
@@ -1033,10 +1035,176 @@ const seedStore: MockStore = {
   "lead-sources": [
     { id: 1, type: "Website" },
     { id: 2, type: "Referral" },
+    { id: 3, type: "LinkedIn" },
+    { id: 4, type: "Cold Email" },
+    { id: 5, type: "Trade Show" },
   ],
   "lead-statuses": [
-    { id: 1, type: "New" },
-    { id: 2, type: "Qualified" },
+    { id: 1, type: "New Lead", color: "#03a9f3" },
+    { id: 2, type: "In Process", color: "#fec107" },
+    { id: 3, type: "Converted", color: "#00c292" },
+    { id: 4, type: "Lost", color: "#e46a76" },
+    { id: 5, type: "Proposal Sent", color: "#ab8ce4" },
+  ],
+  "lead-categories": [
+    { id: 1, category_name: "Enterprise" },
+    { id: 2, category_name: "SMB" },
+    { id: 3, category_name: "Support Upsell" },
+  ],
+  leads: [
+    {
+      id: 1,
+      client_name: "Ayesha Malik",
+      name: "Ayesha Malik",
+      client_email: "ayesha@northstar-retail.test",
+      email: "ayesha@northstar-retail.test",
+      company_name: "Northstar Retail",
+      company: "Northstar Retail",
+      mobile: "+92 300 100 0101",
+      phone: "+92 300 100 0101",
+      website: "https://northstar-retail.test",
+      source_id: 1,
+      source: { id: 1, type: "Website" },
+      status_id: 1,
+      status: { id: 1, type: "New Lead", color: "#03a9f3" },
+      category_id: 1,
+      category: { id: 1, category_name: "Enterprise" },
+      value: 18000,
+      address: "Blue Area, Islamabad",
+      description: "Interested in HR, attendance, payroll, and employee self-service rollout for 120 staff.",
+      agent: { id: 1, name: "John Doe" },
+      followups: [
+        {
+          id: 1,
+          created_at: "2026-05-08T10:00:00+05:00",
+          next_follow_up_date: "2026-05-20T11:30",
+          remark: "Confirm module list and decision timeline.",
+          user: { name: "John Doe" },
+        },
+      ],
+      proposals: [
+        { id: 1, proposal_number: "PROP-1001", valid_till: "2026-06-10", total: 18000, status: "sent" },
+      ],
+      files: [
+        { id: 1, filename: "northstar-requirements.pdf", size: "320 KB", created_at: "2026-05-08T10:10:00+05:00", uploaded_by: "John Doe" },
+      ],
+      gdpr_consents: [
+        { id: 1, purpose: "Sales communication", status: "agree", date: "2026-05-08", ip_address: "127.0.0.1", staff: "John Doe" },
+      ],
+      activities: [
+        { id: 1, created_at: "2026-05-08T10:00:00+05:00", action: "Lead created", details: "Website inquiry imported.", user: { name: "System" } },
+        { id: 2, created_at: "2026-05-08T11:20:00+05:00", action: "Proposal drafted", details: "Initial HRMS proposal prepared.", user: { name: "John Doe" } },
+      ],
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: 2,
+      client_name: "Bilal Ahmed",
+      name: "Bilal Ahmed",
+      client_email: "bilal@metro-logistics.test",
+      email: "bilal@metro-logistics.test",
+      company_name: "Metro Logistics",
+      company: "Metro Logistics",
+      mobile: "+92 321 200 0202",
+      phone: "+92 321 200 0202",
+      website: "https://metro-logistics.test",
+      source_id: 3,
+      source: { id: 3, type: "LinkedIn" },
+      status_id: 2,
+      status: { id: 2, type: "In Process", color: "#fec107" },
+      category_id: 2,
+      category: { id: 2, category_name: "SMB" },
+      value: 9500,
+      address: "Shahrah-e-Faisal, Karachi",
+      description: "Needs shift scheduling, biometric device sync, and leave approval workflow.",
+      agent: { id: 2, name: "Jane Smith" },
+      followups: [
+        {
+          id: 2,
+          created_at: "2026-05-09T15:30:00+05:00",
+          next_follow_up_date: "2026-05-21T14:00",
+          remark: "Demo attendance settings and overnight shifts.",
+          user: { name: "Jane Smith" },
+        },
+      ],
+      proposals: [],
+      files: [],
+      gdpr_consents: [
+        { id: 2, purpose: "Demo scheduling", status: "agree", date: "2026-05-09", ip_address: "127.0.0.1", staff: "Jane Smith" },
+      ],
+      activities: [
+        { id: 1, created_at: "2026-05-09T15:30:00+05:00", action: "Lead qualified", details: "Budget and requirements confirmed.", user: { name: "Jane Smith" } },
+      ],
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: 3,
+      client_name: "Sara Khan",
+      name: "Sara Khan",
+      client_email: "sara@artisan-studio.test",
+      email: "sara@artisan-studio.test",
+      company_name: "Artisan Studio",
+      company: "Artisan Studio",
+      mobile: "+92 333 300 0303",
+      phone: "+92 333 300 0303",
+      website: "https://artisan-studio.test",
+      source_id: 2,
+      source: { id: 2, type: "Referral" },
+      status_id: 5,
+      status: { id: 5, type: "Proposal Sent", color: "#ab8ce4" },
+      category_id: 2,
+      category: { id: 2, category_name: "SMB" },
+      value: 6200,
+      address: "Gulberg, Lahore",
+      description: "Requested a compact HR setup for design and marketing teams.",
+      agent: { id: 1, name: "John Doe" },
+      followups: [],
+      proposals: [
+        { id: 2, proposal_number: "PROP-1002", valid_till: "2026-06-15", total: 6200, status: "sent" },
+      ],
+      files: [],
+      gdpr_consents: [],
+      activities: [
+        { id: 1, created_at: "2026-05-10T12:15:00+05:00", action: "Proposal sent", details: "Pricing sent for review.", user: { name: "John Doe" } },
+      ],
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: 4,
+      client_name: "Omar Farooq",
+      name: "Omar Farooq",
+      client_email: "omar@greenfield-services.test",
+      email: "omar@greenfield-services.test",
+      company_name: "Greenfield Services",
+      company: "Greenfield Services",
+      mobile: "+92 344 400 0404",
+      phone: "+92 344 400 0404",
+      website: "https://greenfield-services.test",
+      source_id: 4,
+      source: { id: 4, type: "Cold Email" },
+      status_id: 3,
+      status: { id: 3, type: "Converted", color: "#00c292" },
+      category_id: 1,
+      category: { id: 1, category_name: "Enterprise" },
+      value: 24000,
+      address: "DHA Phase 5, Lahore",
+      description: "Converted after payroll and attendance demo.",
+      agent: { id: 2, name: "Jane Smith" },
+      followups: [],
+      proposals: [
+        { id: 3, proposal_number: "PROP-1003", valid_till: "2026-06-30", total: 24000, status: "approved" },
+      ],
+      files: [],
+      gdpr_consents: [],
+      activities: [
+        { id: 1, created_at: "2026-05-11T16:40:00+05:00", action: "Lead converted", details: "Marked as converted for onboarding.", user: { name: "Jane Smith" } },
+      ],
+      created_at: now,
+      updated_at: now,
+    },
   ],
   settings: [
     {
@@ -1065,17 +1233,21 @@ const readStore = (): MockStore => {
     const seeded = clone(seedStore);
     const hydrated = hydrateStore(seeded);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
+    window.localStorage.setItem(STORE_VERSION_KEY, STORE_SCHEMA_VERSION);
     return hydrated;
   }
 
   try {
-    const hydrated = hydrateStore({ ...clone(seedStore), ...(JSON.parse(stored) as MockStore) });
+    const shouldMergeLeadDefaults = window.localStorage.getItem(STORE_VERSION_KEY) !== STORE_SCHEMA_VERSION;
+    const hydrated = hydrateStore({ ...clone(seedStore), ...(JSON.parse(stored) as MockStore) }, shouldMergeLeadDefaults);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
+    window.localStorage.setItem(STORE_VERSION_KEY, STORE_SCHEMA_VERSION);
     return hydrated;
   } catch {
     const seeded = clone(seedStore);
     const hydrated = hydrateStore(seeded);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
+    window.localStorage.setItem(STORE_VERSION_KEY, STORE_SCHEMA_VERSION);
     return hydrated;
   }
 };
@@ -1140,6 +1312,10 @@ const resourceAliases: Record<string, string> = {
   department: "departments",
   designation: "designations",
   employee: "employees",
+  lead: "leads",
+  "lead-category": "lead-categories",
+  "lead-source": "lead-sources",
+  "lead-status": "lead-statuses",
   team: "teams",
 };
 
@@ -1197,11 +1373,26 @@ const makeShiftSummary = (shiftType?: MockRecord) =>
       }
     : undefined;
 
-const hydrateStore = (store: MockStore): MockStore => {
+const getRecordLabel = (record: MockRecord, field: string) => String(record[field] || "").toLowerCase();
+
+const mergeSeedRecords = (records: MockRecord[] = [], defaults: MockRecord[] = [], field: string) => {
+  const labels = new Set(records.map((record) => getRecordLabel(record, field)).filter(Boolean));
+  const missing = defaults.filter((record) => !labels.has(getRecordLabel(record, field)));
+  return [...records, ...missing];
+};
+
+const hydrateStore = (store: MockStore, mergeLeadDefaults = false): MockStore => {
   const shifts = store["shift-types"] || [];
+  const leadSources = mergeLeadDefaults ? mergeSeedRecords(store["lead-sources"], seedStore["lead-sources"], "type") : store["lead-sources"] || seedStore["lead-sources"];
+  const leadStatuses = mergeLeadDefaults ? mergeSeedRecords(store["lead-statuses"], seedStore["lead-statuses"], "type") : store["lead-statuses"] || seedStore["lead-statuses"];
+  const leadCategories = mergeLeadDefaults ? mergeSeedRecords(store["lead-categories"], seedStore["lead-categories"], "category_name") : store["lead-categories"] || seedStore["lead-categories"];
 
   return {
     ...store,
+    "lead-sources": leadSources,
+    "lead-statuses": leadStatuses,
+    "lead-categories": leadCategories,
+    leads: Array.isArray(store.leads) ? store.leads : seedStore.leads,
     employees: (store.employees || []).map((employee) => {
       const detail = (employee.employee_detail || {}) as Record<string, unknown>;
       const currentShift = (detail.shift_type || {}) as { id?: unknown };
@@ -1287,6 +1478,72 @@ const makeClientPayload = (payload: Record<string, unknown>, id: number): MockRe
       address: detail.address || payload.address || "",
     },
     created_at: new Date().toISOString(),
+  };
+};
+
+const findLeadOption = (records: MockRecord[] = [], id?: unknown, label?: unknown) => {
+  const labelValue = String(label || "").toLowerCase();
+  return records.find((record) => String(record.id) === String(id)) || records.find((record) => String(record.type || record.category_name || "").toLowerCase() === labelValue);
+};
+
+const makeLeadPayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const sourcePayload = getNestedObject(payload.source);
+  const statusPayload = getNestedObject(payload.status);
+  const categoryPayload = getNestedObject(payload.category);
+  const sourceLabel = sourcePayload.type || (typeof payload.source === "string" ? payload.source : undefined);
+  const statusLabel = statusPayload.type || (typeof payload.status === "string" ? payload.status : undefined);
+  const categoryLabel = categoryPayload.category_name || (typeof payload.category === "string" ? payload.category : undefined);
+  const sourceId = payload.source_id || sourcePayload.id || existing?.source_id || getNestedId(existing?.source) || store["lead-sources"]?.[0]?.id;
+  const statusId = payload.status_id || statusPayload.id || existing?.status_id || getNestedId(existing?.status) || store["lead-statuses"]?.[0]?.id;
+  const categoryId = payload.category_id || categoryPayload.id || existing?.category_id || getNestedId(existing?.category) || store["lead-categories"]?.[0]?.id;
+  const source = (sourceLabel ? findLeadOption(store["lead-sources"], undefined, sourceLabel) : undefined) || findLeadOption(store["lead-sources"], sourceId, sourceLabel) || { id: sourceId || id, type: sourceLabel || "Website" };
+  const status = (statusLabel ? findLeadOption(store["lead-statuses"], undefined, statusLabel) : undefined) || findLeadOption(store["lead-statuses"], statusId, statusLabel) || { id: statusId || id, type: statusLabel || "New Lead" };
+  const category = (categoryLabel ? findLeadOption(store["lead-categories"], undefined, categoryLabel) : undefined) || findLeadOption(store["lead-categories"], categoryId, categoryLabel) || { id: categoryId || id, category_name: categoryLabel || "General" };
+  const clientName = String(payload.client_name || payload.name || existing?.client_name || existing?.name || "Lead Contact");
+  const clientEmail = String(payload.client_email || payload.email || existing?.client_email || existing?.email || `lead-${id}@example.com`);
+  const companyName = String(payload.company_name || payload.company || existing?.company_name || existing?.company || "Prospect Company");
+  const mobile = String(payload.mobile || payload.phone || existing?.mobile || existing?.phone || "");
+  const value = payload.value === undefined || payload.value === "" ? existing?.value || 0 : toNumber(payload.value);
+
+  return {
+    ...(existing || {}),
+    id,
+    ...payload,
+    client_name: clientName,
+    name: clientName,
+    client_email: clientEmail,
+    email: clientEmail,
+    company_name: companyName,
+    company: companyName,
+    mobile,
+    phone: mobile,
+    website: String(payload.website || existing?.website || ""),
+    source_id: source.id,
+    source,
+    status_id: status.id,
+    status,
+    category_id: category.id,
+    category,
+    value,
+    address: String(payload.address || existing?.address || ""),
+    description: String(payload.description || payload.message || existing?.description || existing?.message || ""),
+    message: String(payload.message || payload.description || existing?.message || existing?.description || ""),
+    agent: payload.agent || existing?.agent || store.employees?.[0] || null,
+    followups: Array.isArray(payload.followups) ? payload.followups : existing?.followups || [],
+    proposals: Array.isArray(payload.proposals) ? payload.proposals : existing?.proposals || [],
+    files: Array.isArray(payload.files) ? payload.files : existing?.files || [],
+    gdpr_consents: Array.isArray(payload.gdpr_consents) ? payload.gdpr_consents : existing?.gdpr_consents || [],
+    activities: Array.isArray(payload.activities) ? payload.activities : existing?.activities || [
+      {
+        id: 1,
+        created_at: new Date().toISOString(),
+        action: existing ? "Lead updated" : "Lead created",
+        details: existing ? "Lead details updated." : "Lead added to pipeline.",
+        user: { name: "Current user" },
+      },
+    ],
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 };
 
@@ -1659,25 +1916,27 @@ const makePayrollSettingPayload = (payload: Record<string, unknown>, id: number 
 });
 
 const makeGenericPayload = (store: MockStore, resource: string, payload: Record<string, unknown>, id: number): MockRecord => {
-  if (resource === "clients") return makeClientPayload(payload, id);
-  if (resource === "employees") return makeEmployeePayload(store, payload, id);
-  if (resource === "companies") return makeCompanyPayload(payload, id);
-  if (resource === "admins") return makeAdminPayload(store, payload, id);
-  if (resource === "projects") return makeProjectPayload(store, payload, id);
-  if (resource === "tasks") return makeTaskPayload(store, payload, id);
-  if (resource === "tickets") return makeTicketPayload(store, payload, id);
-  if (resource === "attendance") return makeAttendancePayload(store, payload, id);
-  if (resource === "leaves") return makeLeavePayload(store, payload, id);
-  if (resource === "salary-components") return makeSalaryComponentPayload(payload, id);
-  if (resource === "salary-groups") return makeSalaryGroupPayload(payload, id);
-  if (resource === "employee-salaries") return makeEmployeeSalaryPayload(store, payload, id);
-  if (resource === "employee-salary-groups") return makeEmployeeSalaryGroupPayload(store, payload, id);
-  if (resource === "employee-payroll-cycles") return makeEmployeePayrollCyclePayload(store, payload, id);
-  if (resource === "salary-tds") return makeSalaryTdsPayload(payload, id);
-  if (resource === "salary-payment-methods") return makeSalaryPaymentMethodPayload(payload, id);
-  if (resource === "payroll-settings") return makePayrollSettingPayload(payload, id);
-  if (["invoices", "estimates", "proposals", "payments", "expenses"].includes(resource)) {
-    return makeFinancePayload(store, resource, payload, id);
+  const normalizedResource = normalizeResource(resource);
+  if (normalizedResource === "clients") return makeClientPayload(payload, id);
+  if (normalizedResource === "employees") return makeEmployeePayload(store, payload, id);
+  if (normalizedResource === "companies") return makeCompanyPayload(payload, id);
+  if (normalizedResource === "admins") return makeAdminPayload(store, payload, id);
+  if (normalizedResource === "leads") return makeLeadPayload(store, payload, id);
+  if (normalizedResource === "projects") return makeProjectPayload(store, payload, id);
+  if (normalizedResource === "tasks") return makeTaskPayload(store, payload, id);
+  if (normalizedResource === "tickets") return makeTicketPayload(store, payload, id);
+  if (normalizedResource === "attendance") return makeAttendancePayload(store, payload, id);
+  if (normalizedResource === "leaves") return makeLeavePayload(store, payload, id);
+  if (normalizedResource === "salary-components") return makeSalaryComponentPayload(payload, id);
+  if (normalizedResource === "salary-groups") return makeSalaryGroupPayload(payload, id);
+  if (normalizedResource === "employee-salaries") return makeEmployeeSalaryPayload(store, payload, id);
+  if (normalizedResource === "employee-salary-groups") return makeEmployeeSalaryGroupPayload(store, payload, id);
+  if (normalizedResource === "employee-payroll-cycles") return makeEmployeePayrollCyclePayload(store, payload, id);
+  if (normalizedResource === "salary-tds") return makeSalaryTdsPayload(payload, id);
+  if (normalizedResource === "salary-payment-methods") return makeSalaryPaymentMethodPayload(payload, id);
+  if (normalizedResource === "payroll-settings") return makePayrollSettingPayload(payload, id);
+  if (["invoices", "estimates", "proposals", "payments", "expenses"].includes(normalizedResource)) {
+    return makeFinancePayload(store, normalizedResource, payload, id);
   }
 
   return {
@@ -2095,18 +2354,20 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
   }
 
   if ((method === "put" || method === "patch") && id) {
+    const normalizedResource = normalizeResource(resource);
     const updatedRecords = records.map((record) => {
       if (String(record.id) !== id) return record;
-      if (resource === "employees") return { ...makeEmployeePayload(store, payload, record.id, record), updated_at: new Date().toISOString() };
-      if (resource === "admins") return makeAdminPayload(store, payload, record.id, record);
-      if (resource === "salary-components") return makeSalaryComponentPayload(payload, record.id, record);
-      if (resource === "salary-groups") return makeSalaryGroupPayload(payload, record.id, record);
-      if (resource === "employee-salaries") return makeEmployeeSalaryPayload(store, payload, record.id, record);
-      if (resource === "employee-salary-groups") return makeEmployeeSalaryGroupPayload(store, payload, record.id, record);
-      if (resource === "employee-payroll-cycles") return makeEmployeePayrollCyclePayload(store, payload, record.id, record);
-      if (resource === "salary-tds") return makeSalaryTdsPayload(payload, record.id, record);
-      if (resource === "salary-payment-methods") return makeSalaryPaymentMethodPayload(payload, record.id, record);
-      if (resource === "payroll-settings") return makePayrollSettingPayload(payload, record.id, record);
+      if (normalizedResource === "employees") return { ...makeEmployeePayload(store, payload, record.id, record), updated_at: new Date().toISOString() };
+      if (normalizedResource === "admins") return makeAdminPayload(store, payload, record.id, record);
+      if (normalizedResource === "leads") return makeLeadPayload(store, payload, record.id, record);
+      if (normalizedResource === "salary-components") return makeSalaryComponentPayload(payload, record.id, record);
+      if (normalizedResource === "salary-groups") return makeSalaryGroupPayload(payload, record.id, record);
+      if (normalizedResource === "employee-salaries") return makeEmployeeSalaryPayload(store, payload, record.id, record);
+      if (normalizedResource === "employee-salary-groups") return makeEmployeeSalaryGroupPayload(store, payload, record.id, record);
+      if (normalizedResource === "employee-payroll-cycles") return makeEmployeePayrollCyclePayload(store, payload, record.id, record);
+      if (normalizedResource === "salary-tds") return makeSalaryTdsPayload(payload, record.id, record);
+      if (normalizedResource === "salary-payment-methods") return makeSalaryPaymentMethodPayload(payload, record.id, record);
+      if (normalizedResource === "payroll-settings") return makePayrollSettingPayload(payload, record.id, record);
       return { ...record, ...payload, updated_at: new Date().toISOString() };
     });
     setResourceRecords(store, resource, updatedRecords);

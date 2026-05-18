@@ -20,15 +20,14 @@ export default function CreateLeadStatusPage() {
     setSaving(true);
     setError("");
     try {
-      if (localStorage.getItem("token") === "mock_token_12345") {
-        setTimeout(() => { router.push("/lead-settings"); router.refresh(); }, 800);
-        return;
-      }
       await api.post("/lead-status", { type });
       router.push("/lead-settings");
       router.refresh();
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to create lead status.");
+    } catch (err: unknown) {
+      const message = err && typeof err === "object" && "response" in err
+        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        : undefined;
+      setError(message || "Failed to create lead status.");
     } finally {
       setSaving(false);
     }

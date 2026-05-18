@@ -20,9 +20,15 @@ type LeadListRecord = {
   status?: { type?: string };
 };
 
+type LeadStatusOption = {
+  id: number | string;
+  type: string;
+};
+
 export default function LeadsPage() {
   const { showToast } = useToast();
   const [leads, setLeads] = useState<LeadListRecord[]>([]);
+  const [statuses, setStatuses] = useState<LeadStatusOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -31,8 +37,12 @@ export default function LeadsPage() {
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.get("/lead");
-      setLeads(response.data.data);
+      const [leadResponse, statusResponse] = await Promise.all([
+        api.get("/lead"),
+        api.get("/lead-status"),
+      ]);
+      setLeads(leadResponse.data.data || []);
+      setStatuses(statusResponse.data.data || []);
     } catch (err) {
       console.error("Fetch Leads Error:", err);
       showToast("Failed to load leads", "error");
@@ -59,7 +69,7 @@ export default function LeadsPage() {
       } catch (err) {
         console.error("Delete Lead Error:", err);
         setLeads(prev => prev.filter(l => l.id !== deletingLeadId));
-        showToast("Lead removed locally. PHP endpoint needs to persist it.", "error");
+        showToast("Lead removed from the current view, but persistence failed.", "error");
         setDeletingLeadId(null);
       }
     }
@@ -117,10 +127,9 @@ export default function LeadsPage() {
                 className="w-full rounded-lg border border-gray-100 px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20 outline-none transition-all appearance-none bg-white"
               >
                 <option>All</option>
-                <option>In Process</option>
-                <option>New Lead</option>
-                <option>Converted</option>
-                <option>Lost</option>
+                {statuses.map((status) => (
+                  <option key={status.id}>{status.type}</option>
+                ))}
               </select>
             </div>
             <div className="flex justify-end">
