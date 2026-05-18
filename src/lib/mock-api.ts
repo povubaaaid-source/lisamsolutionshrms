@@ -665,17 +665,17 @@ const seedStore: MockStore = {
     { id: 2, name: "Marketing", team_name: "Marketing" },
     { id: 3, name: "Sales", team_name: "Sales" },
     { id: 4, name: "Quality Assurance", team_name: "Quality Assurance" },
+    { id: 5, name: "HR", team_name: "HR" },
   ],
   teams: [
     { id: 1, name: "Production", team_name: "Production" },
     { id: 2, name: "Marketing", team_name: "Marketing" },
     { id: 3, name: "Sales", team_name: "Sales" },
     { id: 4, name: "Quality Assurance", team_name: "Quality Assurance" },
+    { id: 5, name: "HR", team_name: "HR" },
   ],
   designations: [
-    { id: 1, name: "Sales Manager" },
-    { id: 2, name: "Project Manager" },
-    { id: 3, name: "HR Manager" },
+    { id: 1, name: "Manager" },
     { id: 4, name: "Employee" },
   ],
   currencies: [
