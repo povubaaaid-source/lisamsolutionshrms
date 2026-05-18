@@ -53,19 +53,19 @@ const seedStore: MockStore = {
       admin_email: "admin@prodigy.io",
       created_at: now,
     },
-    {
-      id: 3,
-      name: "Global HR",
-      company_name: "Global HR",
-      email: "admin@globalhr.com",
-      package: "Basic",
-      package_type: "monthly",
-      status: "inactive",
-      lastLogin: "2026-04-28",
-      admin_name: "Global Admin",
-      admin_email: "owner@globalhr.com",
-      created_at: now,
-    },
+    // {
+    //   id: 3,
+    //   name: "Global HR",
+    //   company_name: "Global HR",
+    //   email: "admin@globalhr.com",
+    //   package: "Basic",
+    //   package_type: "monthly",
+    //   status: "inactive",
+    //   lastLogin: "2026-04-28",
+    //   admin_name: "Global Admin",
+    //   admin_email: "owner@globalhr.com",
+    //   created_at: now,
+    // },
   ],
   "attendance-devices": [
     { id: 1, name: "Front Gate (MB460)", serial_number: "ZK-MB460-9901", ip_address: "192.168.1.50", status: "online", last_sync_at: now, location: "Main Entrance" },
@@ -661,22 +661,22 @@ const seedStore: MockStore = {
     },
   ],
   departments: [
-    { id: 1, name: "Administration", team_name: "Administration" },
-    { id: 2, name: "Design", team_name: "Design" },
-    { id: 3, name: "HR", team_name: "HR" },
-    { id: 4, name: "Engineering", team_name: "Engineering" },
+    { id: 1, name: "Production", team_name: "Production" },
+    { id: 2, name: "Marketing", team_name: "Marketing" },
+    { id: 3, name: "Sales", team_name: "Sales" },
+    { id: 4, name: "Quality Assurance", team_name: "Quality Assurance" },
   ],
   teams: [
-    { id: 1, name: "Administration", team_name: "Administration" },
-    { id: 2, name: "Design", team_name: "Design" },
-    { id: 3, name: "HR", team_name: "HR" },
-    { id: 4, name: "Engineering", team_name: "Engineering" },
+    { id: 1, name: "Production", team_name: "Production" },
+    { id: 2, name: "Marketing", team_name: "Marketing" },
+    { id: 3, name: "Sales", team_name: "Sales" },
+    { id: 4, name: "Quality Assurance", team_name: "Quality Assurance" },
   ],
   designations: [
-    { id: 1, name: "Company Admin" },
-    { id: 2, name: "UI Designer" },
+    { id: 1, name: "Sales Manager" },
+    { id: 2, name: "Project Manager" },
     { id: 3, name: "HR Manager" },
-    { id: 4, name: "Senior Developer" },
+    { id: 4, name: "Employee" },
   ],
   currencies: [
     { id: 1, currency_name: "US Dollar", currency_symbol: "$", currency_code: "USD" },
@@ -1308,14 +1308,10 @@ const normalizePermissionList = (value: unknown, fallback: PermissionKey[] = rol
 };
 
 const makeAdminPayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
-  const safePayload = { ...payload };
-  delete safePayload.password;
+  const { password: _password, ...safePayload } = payload;
   const companyId = getNestedId(payload.company) || payload.company_id || existing?.company_id || 1;
   const company = store.companies.find((record) => String(record.id) === String(companyId));
   const permissions = normalizePermissionList(payload.permissions, normalizePermissionList(existing?.permissions, rolePermissions.admin));
-  const nextPassword = typeof payload.password === "string" && payload.password.trim()
-    ? payload.password.trim()
-    : String(existing?.password || "");
 
   return {
     ...(existing || {}),
@@ -1333,7 +1329,6 @@ const makeAdminPayload = (store: MockStore, payload: Record<string, unknown>, id
         }
       : payload.company || existing?.company,
     status: String(payload.status || existing?.status || "active"),
-    password: nextPassword,
     permissions,
     modules: getModulesFromPermissions(permissions),
     last_login_at: existing?.last_login_at || null,
