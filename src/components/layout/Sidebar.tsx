@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { canUserAccessPath, userHasPermission, type AuthUser, type PermissionKey, type UserRole } from "@/lib/auth-contract";
+import { canUserAccessPath, type AuthUser, type UserRole } from "@/lib/auth-contract";
 import { isSaasBillingEnabled } from "@/lib/product-config";
 import { useAuth } from "@/context/AuthContext";
 import logo from "../../../public/logo.png";
@@ -28,8 +28,6 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
-  Plus,
-  Bell,
   Power,
   LogIn,
   User,
@@ -253,16 +251,6 @@ const superAdminMenuItems: MenuItem[] = [
   { icon: Settings, label: "Settings", href: "/super-admin/settings" },
 ];
 
-const quickAddItems = [
-  { label: "Add Project", href: "/projects/create" },
-  { label: "Add Task", href: "/tasks/create" },
-  { label: "Add Client", href: "/clients/create" },
-  { label: "Add Employee", href: "/employees/create" },
-  { label: "Add Payment", href: "/payments/create" },
-  { label: "Add Ticket", href: "/tickets/create" },
-  { label: "Add Payroll", href: "/payroll" },
-];
-
 const roleMenuAccess: Record<UserRole, string[]> = {
   super_admin: superAdminMenuItems.map((item) => item.label),
   admin: menuItems.filter((item) => item.label !== "Super Admin").map((item) => item.label),
@@ -284,23 +272,6 @@ const roleSubmenuAccess: Partial<Record<UserRole, Record<string, string[]>>> = {
     Finance: ["Estimates", "Invoices", "Payments", "Credit Notes"],
     Tickets: ["Tickets", "Support Tickets"],
   },
-};
-
-const roleQuickAddAccess: Record<UserRole, string[]> = {
-  super_admin: [],  
-  admin: quickAddItems.map((item) => item.label),
-  employee: ["Add Task", "Add Ticket"],
-  client: ["Add Ticket"],
-};
-
-const quickAddPermissionMap: Partial<Record<string, PermissionKey>> = {
-  "Add Project": "projects.create",
-  "Add Task": "tasks.create",
-  "Add Client": "clients.create",
-  "Add Employee": "employees.create",
-  "Add Payment": "finance.create",
-  "Add Ticket": "tickets.create",
-  "Add Payroll": "payroll.create",
 };
 
 const canOpenItem = (user: AuthUser | null, userRole: UserRole, item: MenuItem) => {
@@ -325,10 +296,10 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
 
   const [openMenus, setOpenMenus] = useState<string[]>([]);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const { user, logout, stopImpersonation } = useAuth();
-  const userRole = user?.role || "admin";
-  const userName = user?.name || "Admin User";
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const userRole = hasHydrated ? user?.role || "admin" : "admin";
+  const userName = hasHydrated ? user?.name || "Admin User" : "Admin User";
 
   const filteredMenuItems = useMemo(() => {
     if (userRole === "super_admin") {
@@ -379,15 +350,10 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       });
   }, [user, userRole]);
 
-  const filteredQuickAddItems = useMemo(() => {
-    const allowedItems = roleQuickAddAccess[userRole];
-    return quickAddItems.filter((item) => {
-      if (!allowedItems.includes(item.label)) return false;
-      if (userRole !== "admin") return true;
-      const permission = quickAddPermissionMap[item.label];
-      return Boolean(user && permission && userHasPermission(user, permission));
-    });
-  }, [user, userRole]);
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setHasHydrated(true), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   useEffect(() => {
     onMobileClose?.();
@@ -562,7 +528,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         </nav>
 
 
-        {/* Footer – User / Quick Add / Notifications */}
+        {/* Footer - User */}
         <div className={`border-t border-white/10 bg-secondary/80 p-3 transition-all duration-300 ${!isExpanded ? "flex flex-col items-center space-y-4" : ""}`}>
           <div className={`flex items-center ${isExpanded ? "justify-between" : "flex-col space-y-4"}`}>
             {/* User avatar + dropdown */}
@@ -601,41 +567,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
               )}
             </div>
 
-            {/* Quick Add */}
-            {userRole !== "super_admin" && filteredQuickAddItems.length > 0 && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowQuickAdd(!showQuickAdd)}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
-                  aria-label="Open quick add menu"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
-                {showQuickAdd && isExpanded && (
-                  <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 w-48 rounded-2xl bg-secondary shadow-2xl border border-white/10 p-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                    {filteredQuickAddItems.map((item) => (
-                      <Link
-                        key={item.label}
-                        href={item.href}
-                        onClick={onMobileClose}
-                        className="block px-3 py-2.5 rounded-xl text-xs text-gray-400 hover:bg-white/5 hover:text-white transition-all"
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Notifications */}
-            {userRole !== "super_admin" && (
-              <button type="button" className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gray-700/50 text-gray-400 hover:text-white transition-all" aria-label="Open notifications">
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#151e2d]"></span>
-              </button>
-            )}
           </div>  
         </div>
       </aside>

@@ -1,21 +1,5 @@
-"use client";
+import CreditNoteDetailPage from "@/features/credit-notes/detail/CreditNoteDetailPage";
 
-import { useMemo } from "react";
-import { useParams } from "next/navigation";
-import FinanceDocumentPage, { makeFinanceFallback } from "@/components/admin/FinanceDocumentPage";
-
-export default function CreditNoteDetailsPage() {
-  const params = useParams();
-  const fallback = useMemo(() => makeFinanceFallback(params.id, "credit-note"), [params.id]);
-
-  return (
-    <FinanceDocumentPage
-      documentType="credit-note"
-      title="Credit Note"
-      endpoint="credit-note"
-      listPath="/credit-notes"
-      editPathPrefix="/credit-notes"
-      fallback={fallback}
-    />
-  );
+export default function Page() {
+  return <CreditNoteDetailPage />;
 }
