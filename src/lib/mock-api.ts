@@ -1137,10 +1137,19 @@ const parseBody = (data: unknown): Record<string, unknown> => {
 const nextId = (records: MockRecord[]) =>
   records.reduce((max, record) => Math.max(max, Number(record.id) || 0), 0) + 1;
 
-const getResourceRecords = (store: MockStore, resource: string) => store[resource] || [];
+const resourceAliases: Record<string, string> = {
+  department: "departments",
+  designation: "designations",
+  employee: "employees",
+  team: "teams",
+};
+
+const normalizeResource = (resource: string) => resourceAliases[resource] || resource;
+
+const getResourceRecords = (store: MockStore, resource: string) => store[normalizeResource(resource)] || [];
 
 const setResourceRecords = (store: MockStore, resource: string, records: MockRecord[]) => {
-  store[resource] = records;
+  store[normalizeResource(resource)] = records;
   writeStore(store);
 };
 
