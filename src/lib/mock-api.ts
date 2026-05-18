@@ -144,8 +144,8 @@ const seedStore: MockStore = {
       status: "active",
       company_id: 1,
       employee_detail: {
-        designation: { id: 1, name: "Company Admin" },
-        department: { id: 1, team_name: "Administration", name: "Administration" },
+        designation: { id: 1, name: "Sales Manager" },
+        department: { id: 1, team_name: "Sales", name: "Sales" },
         joining_date: "2023-01-15",
         shift_type_id: 1,
         shift_type: {
@@ -171,8 +171,8 @@ const seedStore: MockStore = {
       status: "active",
       company_id: 1,
       employee_detail: {
-        designation: { id: 2, name: "UI Designer" },
-        department: { id: 2, team_name: "Design", name: "Design" },
+        designation: { id: 2, name: "Project Manager" },
+        department: { id: 2, team_name: "Marketing", name: "Marketing" },
         joining_date: "2023-03-20",
         shift_type_id: 3,
         shift_type: {
@@ -198,8 +198,8 @@ const seedStore: MockStore = {
       status: "deactive",
       company_id: 1,
       employee_detail: {
-        designation: { id: 3, name: "HR Manager" },
-        department: { id: 3, team_name: "HR", name: "HR" },
+        designation: { id: 3, name: "Employee" },
+        department: { id: 3, team_name: "Employee", name: "employee" },
         joining_date: "2022-11-01",
         shift_type_id: 1,
         shift_type: {
