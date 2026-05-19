@@ -98,6 +98,11 @@ export const calculateLateMinutes = (clockInTime?: string, shift?: ShiftDefiniti
   return Math.max(0, clockIn - shiftStart);
 };
 
+export const calculateLateAfterGraceMinutes = (clockInTime?: string, shift?: ShiftDefinition): number => {
+  const lateMinutes = calculateLateMinutes(clockInTime, shift);
+  return Math.max(0, lateMinutes - Number(shift?.late_grace_minutes || 0));
+};
+
 /**
  * Calculates the numeric units for a leave record (e.g., 0.5 for half day).
  */

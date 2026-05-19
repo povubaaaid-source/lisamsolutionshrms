@@ -1,5 +1,5 @@
-import CreateAttendancePage from "@/features/attendance/create/CreateAttendancePage";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <CreateAttendancePage />;
+  redirect("/attendance");
 }

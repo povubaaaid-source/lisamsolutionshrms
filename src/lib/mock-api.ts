@@ -23,6 +23,7 @@ const STORE_VERSION_KEY = `${STORAGE_KEY}:schema`;
 const NETWORK_DELAY_MS = 120;
 
 const now = new Date("2026-05-08T09:00:00+05:00").toISOString();
+const mockToday = () => new Date().toISOString().slice(0, 10);
 const mockChatImage =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='720' height='420' viewBox='0 0 720 420'%3E%3Crect width='720' height='420' rx='36' fill='%2303a9f3'/%3E%3Ccircle cx='594' cy='94' r='92' fill='%23ffffff' fill-opacity='.22'/%3E%3Cpath d='M92 296c94-112 162-126 252-40 54 52 118 64 196 14 38-24 66-26 88-4v82H92z' fill='%23ffffff' fill-opacity='.28'/%3E%3Crect x='84' y='72' width='282' height='42' rx='21' fill='%23ffffff' fill-opacity='.9'/%3E%3Crect x='84' y='138' width='430' height='26' rx='13' fill='%23ffffff' fill-opacity='.62'/%3E%3Crect x='84' y='184' width='338' height='26' rx='13' fill='%23ffffff' fill-opacity='.42'/%3E%3C/svg%3E";
 
@@ -200,6 +201,32 @@ const seedStore: MockStore = {
         designation: { id: 3, name: "Employee" },
         department: { id: 3, team_name: "Employee", name: "employee" },
         joining_date: "2022-11-01",
+        shift_type_id: 1,
+        shift_type: {
+          id: 1,
+          shift_name: "General Day Shift",
+          type: "fixed",
+          start_time: "09:00",
+          end_time: "18:00",
+          break_minutes: 60,
+          late_grace_minutes: 15,
+          half_day_mark_time: "13:00",
+          min_hours: 8,
+        },
+      },
+      created_at: now,
+    },
+    {
+      id: 4,
+      name: "Sara Ahmed",
+      email: "sara@example.com",
+      role: "employee",
+      status: "active",
+      company_id: 1,
+      employee_detail: {
+        designation: { id: 4, name: "Employee" },
+        department: { id: 4, team_name: "Quality Assurance", name: "Quality Assurance" },
+        joining_date: "2024-02-12",
         shift_type_id: 1,
         shift_type: {
           id: 1,
@@ -636,6 +663,86 @@ const seedStore: MockStore = {
       working_from: "office",
       late: false,
       half_day: false,
+      created_at: now,
+    },
+    {
+      id: 101,
+      employee_id: 1,
+      user_id: 1,
+      employee: { id: 1, name: "John Doe", employee_detail: { designation: { name: "Company Admin" } } },
+      date: mockToday(),
+      status: "present",
+      clock_in: "09:00",
+      clock_out: "18:00",
+      clock_in_ip: "192.168.1.50",
+      clock_out_ip: "192.168.1.50",
+      working_from: "office",
+      late: false,
+      half_day: false,
+      source: "machine",
+      source_type: "machine",
+      attendance_device_id: 1,
+      device_id: 1,
+      created_at: now,
+    },
+    {
+      id: 102,
+      employee_id: 2,
+      user_id: 2,
+      employee: { id: 2, name: "Jane Smith", employee_detail: { designation: { name: "Project Manager" } } },
+      date: mockToday(),
+      status: "late",
+      clock_in: "10:45",
+      clock_out: "19:05",
+      clock_in_ip: "192.168.1.50",
+      clock_out_ip: "192.168.1.50",
+      working_from: "office",
+      late: true,
+      half_day: false,
+      source: "machine",
+      source_type: "machine",
+      attendance_device_id: 1,
+      device_id: 1,
+      created_at: now,
+    },
+    {
+      id: 103,
+      employee_id: 3,
+      user_id: 3,
+      employee: { id: 3, name: "Mike Tyson", employee_detail: { designation: { name: "HR Manager" } } },
+      date: mockToday(),
+      status: "absent",
+      clock_in: "",
+      clock_out: "",
+      clock_in_ip: "-",
+      clock_out_ip: "-",
+      working_from: "",
+      late: false,
+      half_day: false,
+      source: "system",
+      source_type: "system",
+      attendance_device_id: null,
+      device_id: null,
+      created_at: now,
+    },
+    {
+      id: 104,
+      employee_id: 4,
+      user_id: 4,
+      employee: { id: 4, name: "Sara Ahmed", employee_detail: { designation: { name: "Employee" } } },
+      date: mockToday(),
+      status: "half-day",
+      clock_in: "13:10",
+      clock_out: "18:05",
+      clock_in_ip: "192.168.1.55",
+      clock_out_ip: "192.168.1.55",
+      working_from: "office",
+      late: false,
+      half_day: true,
+      source: "machine",
+      source_type: "machine",
+      attendance_device_id: 2,
+      device_id: 2,
       created_at: now,
     },
   ],
@@ -1407,11 +1514,128 @@ const mergeSeedRecords = (records: MockRecord[] = [], defaults: MockRecord[] = [
   return [...records, ...missing];
 };
 
+const buildDailyAttendanceDefaults = (employees: MockRecord[], shifts: MockRecord[], date: string): MockRecord[] =>
+  employees.slice(0, 4).map((employee, index) => {
+    const detail = getNestedObject(employee.employee_detail);
+    const shiftTypeId = detail.shift_type_id || getNestedId(detail.shift_type) || 1;
+    const shift = shifts.find((record) => String(record.id) === String(shiftTypeId));
+    const base = {
+      id: `daily-${date}-${employee.id}`,
+      employee_id: employee.id,
+      user_id: employee.id,
+      employee: {
+        id: employee.id,
+        name: employee.name,
+        employee_detail: detail,
+      },
+      date,
+      shift_type_id: shiftTypeId,
+      shift_type: makeShiftSummary(shift),
+      working_from: "office",
+      created_at: now,
+      updated_at: now,
+    };
+
+    if (index === 1) {
+      return {
+        ...base,
+        status: "late",
+        clock_in: "10:45",
+        clock_out: "19:05",
+        clock_in_ip: "192.168.1.50",
+        clock_out_ip: "192.168.1.50",
+        late: true,
+        half_day: false,
+        source: "machine",
+        source_type: "machine",
+        attendance_device_id: 1,
+        device_id: 1,
+      };
+    }
+
+    if (index === 2) {
+      return {
+        ...base,
+        status: "absent",
+        clock_in: "",
+        clock_out: "",
+        clock_in_ip: "-",
+        clock_out_ip: "-",
+        working_from: "",
+        late: false,
+        half_day: false,
+        source: "system",
+        source_type: "system",
+        attendance_device_id: null,
+        device_id: null,
+      };
+    }
+
+    if (index === 3) {
+      return {
+        ...base,
+        status: "half-day",
+        clock_in: "13:10",
+        clock_out: "18:05",
+        clock_in_ip: "192.168.1.55",
+        clock_out_ip: "192.168.1.55",
+        late: false,
+        half_day: true,
+        source: "machine",
+        source_type: "machine",
+        attendance_device_id: 2,
+        device_id: 2,
+      };
+    }
+
+    return {
+      ...base,
+      status: "present",
+      clock_in: "09:00",
+      clock_out: "18:00",
+      clock_in_ip: "192.168.1.50",
+      clock_out_ip: "192.168.1.50",
+      late: false,
+      half_day: false,
+      source: "machine",
+      source_type: "machine",
+      attendance_device_id: 1,
+      device_id: 1,
+    };
+  });
+
+const mergeDailyAttendanceDefaults = (records: MockRecord[] = [], employees: MockRecord[], shifts: MockRecord[]) => {
+  const date = mockToday();
+  const existingKeys = new Set(records.map((record) => `${record.employee_id || record.user_id}-${record.date}`));
+  const missing = buildDailyAttendanceDefaults(employees, shifts, date).filter(
+    (record) => !existingKeys.has(`${record.employee_id || record.user_id}-${record.date}`),
+  );
+  return [...records, ...missing];
+};
+
 const hydrateStore = (store: MockStore, mergeLeadDefaults = false): MockStore => {
   const shifts = store["shift-types"] || [];
   const leadSources = mergeLeadDefaults ? mergeSeedRecords(store["lead-sources"], seedStore["lead-sources"], "type") : store["lead-sources"] || seedStore["lead-sources"];
   const leadStatuses = mergeLeadDefaults ? mergeSeedRecords(store["lead-statuses"], seedStore["lead-statuses"], "type") : store["lead-statuses"] || seedStore["lead-statuses"];
   const leadCategories = mergeLeadDefaults ? mergeSeedRecords(store["lead-categories"], seedStore["lead-categories"], "category_name") : store["lead-categories"] || seedStore["lead-categories"];
+  const employeeRecords = mergeSeedRecords(store.employees || [], seedStore.employees, "email");
+  const hydratedEmployees = employeeRecords.map((employee) => {
+    const detail = (employee.employee_detail || {}) as Record<string, unknown>;
+    const currentShift = (detail.shift_type || {}) as { id?: unknown };
+    const shiftTypeId = detail.shift_type_id || currentShift.id;
+    const shift = shifts.find((record) => String(record.id) === String(shiftTypeId));
+
+    if (!shiftTypeId || !shift) return employee;
+
+    return {
+      ...employee,
+      employee_detail: {
+        ...detail,
+        shift_type_id: shiftTypeId,
+        shift_type: makeShiftSummary(shift),
+      },
+    };
+  });
 
   return {
     ...store,
@@ -1419,23 +1643,8 @@ const hydrateStore = (store: MockStore, mergeLeadDefaults = false): MockStore =>
     "lead-statuses": leadStatuses,
     "lead-categories": leadCategories,
     leads: Array.isArray(store.leads) ? store.leads : seedStore.leads,
-    employees: (store.employees || []).map((employee) => {
-      const detail = (employee.employee_detail || {}) as Record<string, unknown>;
-      const currentShift = (detail.shift_type || {}) as { id?: unknown };
-      const shiftTypeId = detail.shift_type_id || currentShift.id;
-      const shift = shifts.find((record) => String(record.id) === String(shiftTypeId));
-
-      if (!shiftTypeId || !shift) return employee;
-
-      return {
-        ...employee,
-        employee_detail: {
-          ...detail,
-          shift_type_id: shiftTypeId,
-          shift_type: makeShiftSummary(shift),
-        },
-      };
-    }),
+    employees: hydratedEmployees,
+    attendance: mergeDailyAttendanceDefaults(store.attendance || [], hydratedEmployees, shifts),
   };
 };
 
@@ -1699,17 +1908,23 @@ const makeTicketPayload = (store: MockStore, payload: Record<string, unknown>, i
   };
 };
 
-const makeAttendancePayload = (store: MockStore, payload: Record<string, unknown>, id: number): MockRecord => {
-  const employeeId = payload.employee_id || payload.user_id;
+const makeAttendancePayload = (store: MockStore, payload: Record<string, unknown>, id: number | string, existing?: MockRecord): MockRecord => {
+  const employeeId = payload.employee_id || payload.user_id || existing?.employee_id || existing?.user_id;
   const employee = store.employees.find((record) => String(record.id) === String(employeeId));
   const employeeDetail = (employee?.employee_detail || {}) as Record<string, unknown>;
-  const shiftTypeId = payload.shift_type_id || employeeDetail.shift_type_id;
+  const shiftTypeId = payload.shift_type_id || existing?.shift_type_id || employeeDetail.shift_type_id;
   const shiftType = store["shift-types"].find((record) => String(record.id) === String(shiftTypeId));
-  const late = Boolean(payload.late || payload.is_late);
-  const halfDay = Boolean(payload.half_day || payload.is_half_day);
-  const status = String(payload.status || (late ? "late" : halfDay ? "half-day" : "present"));
+  const requestedStatus = String(payload.status || existing?.status || "present");
+  const late = payload.late !== undefined || payload.is_late !== undefined
+    ? Boolean(payload.late || payload.is_late)
+    : requestedStatus === "late";
+  const halfDay = payload.half_day !== undefined || payload.is_half_day !== undefined
+    ? Boolean(payload.half_day || payload.is_half_day)
+    : requestedStatus === "half-day";
+  const status = String(payload.status || (late ? "late" : halfDay ? "half-day" : requestedStatus));
 
   return {
+    ...(existing || {}),
     id,
     ...payload,
     employee_id: employeeId || null,
@@ -1724,17 +1939,24 @@ const makeAttendancePayload = (store: MockStore, payload: Record<string, unknown
     shift_type_id: shiftTypeId || null,
     shift_type: shiftType
       ? makeShiftSummary(shiftType)
-      : payload.shift_type,
-    date: String(payload.date || new Date().toISOString().slice(0, 10)),
+      : payload.shift_type || existing?.shift_type,
+    date: String(payload.date || existing?.date || new Date().toISOString().slice(0, 10)),
     status,
-    clock_in: String(payload.clock_in || "09:00"),
-    clock_out: String(payload.clock_out || "18:00"),
-    clock_in_ip: String(payload.clock_in_ip || "192.168.1.1"),
-    clock_out_ip: String(payload.clock_out_ip || "192.168.1.1"),
-    working_from: String(payload.working_from || "office"),
+    clock_in: String(payload.clock_in ?? existing?.clock_in ?? "09:00"),
+    clock_out: String(payload.clock_out ?? existing?.clock_out ?? "18:00"),
+    clock_in_ip: String(payload.clock_in_ip ?? existing?.clock_in_ip ?? "192.168.1.1"),
+    clock_out_ip: String(payload.clock_out_ip ?? existing?.clock_out_ip ?? "192.168.1.1"),
+    working_from: String(payload.working_from ?? existing?.working_from ?? "office"),
+    source_type: String(payload.source_type || payload.source || existing?.source_type || "manual"),
+    source: String(payload.source || payload.source_type || existing?.source || "manual"),
+    device_id: payload.device_id ?? existing?.device_id ?? null,
+    attendance_device_id: payload.attendance_device_id ?? existing?.attendance_device_id ?? payload.device_id ?? null,
+    manual_override: payload.manual_override ?? existing?.manual_override ?? false,
+    override_reason: payload.override_reason || payload.reason || existing?.override_reason || "",
     late,
     half_day: halfDay,
-    created_at: new Date().toISOString(),
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 };
 
@@ -2269,7 +2491,51 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
 
   // Attendance Override
   if (resource === "attendance" && id === "override" && method === "post") {
-    return jsonResponse(config, 200, apiEnvelope({ success: true }, "Attendance overridden successfully"));
+    const attendanceRecords = getResourceRecords(store, "attendance");
+    const employeeId = payload.employee_id || payload.user_id;
+    const attendanceId = payload.attendance_id || payload.id;
+    const attendanceDate = String(payload.date || new Date().toISOString().slice(0, 10));
+    const existing = attendanceRecords.find((record) => {
+      if (attendanceId) return String(record.id) === String(attendanceId);
+      return String(record.employee_id || record.user_id) === String(employeeId) && String(record.date) === attendanceDate;
+    });
+    const saved = makeAttendancePayload(
+      store,
+      {
+        ...payload,
+        employee_id: employeeId,
+        user_id: employeeId,
+        date: attendanceDate,
+        manual_override: true,
+        source: "manual_override",
+        source_type: "manual_override",
+      },
+      existing?.id || nextId(attendanceRecords),
+      existing,
+    );
+    const overrideEntry = {
+      id: Date.now(),
+      old_status: existing?.status || null,
+      new_status: saved.status,
+      old_clock_in: existing?.clock_in || "",
+      new_clock_in: saved.clock_in || "",
+      old_clock_out: existing?.clock_out || "",
+      new_clock_out: saved.clock_out || "",
+      reason: String(payload.reason || payload.override_reason || "Manual HR override"),
+      approved_by: payload.approved_by || payload.updated_by || "HR/Admin",
+      source: "manual_override",
+      created_at: new Date().toISOString(),
+    };
+    const savedWithHistory = {
+      ...saved,
+      override_history: [...((existing?.override_history as unknown[]) || []), overrideEntry],
+    };
+    const updatedRecords = existing
+      ? attendanceRecords.map((record) => (String(record.id) === String(existing.id) ? savedWithHistory : record))
+      : [savedWithHistory, ...attendanceRecords];
+
+    setResourceRecords(store, "attendance", updatedRecords);
+    return jsonResponse(config, 200, apiEnvelope(savedWithHistory, "Attendance overridden successfully"));
   }
 
   if (resource === "admins" && !requireRole(config, "super_admin")) {
@@ -2386,6 +2652,7 @@ export const mockApiAdapter: AxiosAdapter = async (config) => {
       if (normalizedResource === "employees") return { ...makeEmployeePayload(store, payload, record.id, record), updated_at: new Date().toISOString() };
       if (normalizedResource === "admins") return makeAdminPayload(store, payload, record.id, record);
       if (normalizedResource === "leads") return makeLeadPayload(store, payload, record.id, record);
+      if (normalizedResource === "attendance") return makeAttendancePayload(store, payload, record.id, record);
       if (normalizedResource === "salary-components") return makeSalaryComponentPayload(payload, record.id, record);
       if (normalizedResource === "salary-groups") return makeSalaryGroupPayload(payload, record.id, record);
       if (normalizedResource === "employee-salaries") return makeEmployeeSalaryPayload(store, payload, record.id, record);

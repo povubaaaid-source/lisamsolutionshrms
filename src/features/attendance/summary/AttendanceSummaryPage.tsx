@@ -51,6 +51,8 @@ type DayDetail = { employee: EmployeeOption; day: number; date: string; status: 
 const now = new Date();
 const thisYear = now.getFullYear();
 const thisMonth = now.getMonth() + 1;
+const getDateForDay = (year: number, month: number, day: number) =>
+  `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
 // Local status helpers are removed in favor of hr-utils.ts
 
@@ -141,7 +143,7 @@ export default function AttendanceSummaryPage() {
 
   const getDayStatus = (employeeId: number | string, day: number) => {
     const date = new Date(year, month - 1, day);
-    const dateString = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dateString = getDateForDay(year, month, day);
     const record = attendanceByEmployeeDay.get(`${employeeId}-${day}`);
     if (record) {
       const shift = record.shift_type || employees.find((employee) => String(employee.id) === String(employeeId))?.employee_detail?.shift_type;
@@ -156,7 +158,7 @@ export default function AttendanceSummaryPage() {
   };
 
   const getDayDetail = (employee: EmployeeOption, day: number): DayDetail => {
-    const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const date = getDateForDay(year, month, day);
     const attendanceRecord = attendanceByEmployeeDay.get(`${employee.id}-${day}`);
     const holiday = holidays.find((item) => getHolidayDate(item) === date);
     const leave = leaves.find((item) => getLeaveEmployeeId(item) === String(employee.id) && getLeaveDate(item) === date && item.status === "approved");
@@ -181,9 +183,9 @@ export default function AttendanceSummaryPage() {
             </h4>
           </div>
           <div className="col-sm-9 text-right flex justify-end items-center space-x-2">
-            <Link href="/attendance/create">
+            <Link href="/attendance">
               <Button className="btn-success btn-sm">
-                {canManageAttendance ? "Mark Attendance" : "Clock In"} <Plus className="h-4 w-4 ml-1 inline-block" />
+                {canManageAttendance ? "Open Daily Attendance" : "My Attendance"} <Plus className="h-4 w-4 ml-1 inline-block" />
               </Button>
             </Link>
             <ol className="breadcrumb hidden-xs">
@@ -198,8 +200,8 @@ export default function AttendanceSummaryPage() {
             <div className="white-box p-0 border-b border-[#eee]">
               <nav className="flex space-x-8 px-6">
                 <Link href="/attendance/summary" className="py-4 text-[13px] font-bold text-primary border-b-2 border-primary transition-all">Summary</Link>
-                <Link href="/attendance" className="py-4 text-[13px] font-bold text-gray-400 border-b-2 border-transparent hover:text-primary transition-all">Attendance By Member</Link>
-                <Link href="/attendance/date" className="py-4 text-[13px] font-bold text-gray-400 border-b-2 border-transparent hover:text-primary transition-all">Attendance By Date</Link>
+                <Link href="/attendance" className="py-4 text-[13px] font-bold text-gray-400 border-b-2 border-transparent hover:text-primary transition-all">Daily Attendance</Link>
+                <Link href="/attendance/date" className="py-4 text-[13px] font-bold text-gray-400 border-b-2 border-transparent hover:text-primary transition-all">Date Wise Attendance</Link>
               </nav>
             </div>
           </div>
@@ -266,7 +268,15 @@ export default function AttendanceSummaryPage() {
                 <tr className="bg-gray-50">
                   <th className="w-[180px] px-4 py-3 text-[11px] font-bold uppercase sticky left-0 z-10 bg-gray-50 border-r">Employee</th>
                   {daysArray.map((day) => (
-                    <th key={day} className="w-10 text-center px-1 py-3 text-[10px] font-bold border-r">{day}</th>
+                    <th key={day} className="w-10 text-center px-1 py-3 text-[10px] font-bold border-r">
+                      <Link
+                        href={`/attendance/date?date=${getDateForDay(year, month, day)}`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded bg-white text-gray-600 transition hover:bg-primary hover:text-white"
+                        title={`Open daily attendance for ${getDateForDay(year, month, day)}`}
+                      >
+                        {day}
+                      </Link>
+                    </th>
                   ))}
                   <th className="w-24 text-center px-4 py-3 text-[11px] font-bold uppercase">Total</th>
                 </tr>
@@ -309,7 +319,12 @@ export default function AttendanceSummaryPage() {
                 <h4 className="m-0 text-sm font-black uppercase tracking-widest text-gray-800">{selectedDayDetail.employee.name} / {selectedDayDetail.date}</h4>
                 <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Status: {selectedDayDetail.status}</p>
               </div>
-              <Button onClick={() => setSelectedDayDetail(null)} className="btn-default h-9 text-[10px]">Close</Button>
+              <div className="flex gap-2">
+                <Link href={`/attendance/date?date=${selectedDayDetail.date}`}>
+                  <Button className="btn-success h-9 text-[10px]">View Full Day</Button>
+                </Link>
+                <Button onClick={() => setSelectedDayDetail(null)} className="btn-default h-9 text-[10px]">Close</Button>
+              </div>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
