@@ -9,30 +9,35 @@ import {
   User, 
   Mail, 
   Lock, 
+  Eye,
+  EyeOff,
   Calendar, 
   MapPin, 
   Hash, 
   Phone, 
-  Languages,
   CheckCircle2,
   Info,
   ChevronDown,
   RefreshCw,
-  Clock,
-  Eye,
-  EyeOff
+  Clock
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import api from "@/lib/api";
+import { getModulesFromPermissions, rolePermissions, type PermissionKey } from "@/lib/auth-contract";
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
-import { getModulesFromPermissions, rolePermissions, type PermissionKey } from "@/lib/auth-contract";
 import EmployeePermissionMatrix, { type EmployeeAssignableRole } from "@/features/employees/components/EmployeePermissionMatrix";
+
+const PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+
+const generatePassword = () =>
+  Array.from({ length: 12 }, () => PASSWORD_CHARS[Math.floor(Math.random() * PASSWORD_CHARS.length)]).join("");
 
 const validateEmployeePassword = (password: string, name: string, email: string, employeeId: string) => {
   const trimmedPassword = password.trim();
+
   if (!trimmedPassword) return "Password is required.";
   if (trimmedPassword.length < 8) return "Password must be at least 8 characters.";
 
@@ -48,15 +53,12 @@ const validateEmployeePassword = (password: string, name: string, email: string,
   return "";
 };
 
-const generatePassword = () => {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-};
-
 export default function CreateEmployeePage() {
   const { showToast } = useToast();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
 
   type DepartmentOption = {
     id: number | string;
@@ -96,21 +98,22 @@ export default function CreateEmployeePage() {
     designation: "",
     department: "",
     shift_type_id: "",
-    phone_code: "+1",
+    phone_code: "+92",
     mobile: "",
     hourly_rate: "",
     role: "employee" as EmployeeAssignableRole,
     permissions: rolePermissions.employee as PermissionKey[],
     login: "enable",
     email_notifications: "1",
-    locale: "en"
   });
 
   const [generateRandom, setGenerateRandom] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [passwordTouched, setPasswordTouched] = useState(false);
-
-  const passwordValidationMessage = validateEmployeePassword(formData.password, formData.name, formData.email, formData.employee_id);
+  const passwordValidationMessage = validateEmployeePassword(
+    formData.password,
+    formData.name,
+    formData.email,
+    formData.employee_id,
+  );
   const visiblePasswordError = passwordTouched && passwordValidationMessage;
 
   useEffect(() => {
@@ -154,6 +157,9 @@ export default function CreateEmployeePage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    if (name === "password") {
+      setPasswordTouched(true);
+    }
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -161,30 +167,26 @@ export default function CreateEmployeePage() {
     const isChecked = !generateRandom;
     setGenerateRandom(isChecked);
     if (isChecked) {
-      setFormData(prev => ({ ...prev, password: generatePassword() }));
-      setShowPassword(true);
       setPasswordTouched(true);
+      setShowPassword(true);
+      setFormData(prev => ({ ...prev, password: generatePassword() }));
     } else {
-      setFormData(prev => ({ ...prev, password: "" }));
       setShowPassword(false);
+      setFormData(prev => ({ ...prev, password: "" }));
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordTouched(true);
-
-    const passwordError = validateEmployeePassword(formData.password, formData.name, formData.email, formData.employee_id);
-    if (passwordError) {
-      showToast(passwordError, "error");
+    if (passwordValidationMessage) {
+      showToast(passwordValidationMessage, "error");
       return;
     }
-
     if (!formData.gender) {
       showToast("Select employee gender.", "error");
       return;
     }
-
     setLoading(true);
     try {
       const selectedDesignation = designations.find((designation) => String(designation.id) === String(formData.designation));
@@ -194,6 +196,8 @@ export default function CreateEmployeePage() {
       const modules = getModulesFromPermissions(permissions);
       const payload = {
         ...formData,
+        permissions,
+        modules,
         designation_id: formData.designation,
         designation_name: selectedDesignation?.name || "",
         department_id: formData.department,
@@ -201,8 +205,6 @@ export default function CreateEmployeePage() {
         department_name: selectedDepartment?.team_name || "",
         shift_type_id: formData.shift_type_id || null,
         shift_type: selectedShift || null,
-        permissions,
-        modules,
         employee_detail: {
           employee_id: formData.employee_id,
           address: formData.address,
@@ -334,26 +336,24 @@ export default function CreateEmployeePage() {
                          type={showPassword ? "text" : "password"}
                          readOnly={generateRandom}
                          value={formData.password}
-                         onBlur={() => setPasswordTouched(true)}
-                         onChange={(event) => {
-                           setPasswordTouched(true);
-                           handleInputChange(event);
-                         }}
-                         placeholder="Minimum 8 characters"
-                         className={`w-full bg-gray-50 border-none rounded-xl py-3.5 pl-12 pr-12 text-xs font-black tracking-tight outline-none focus:ring-2 transition-all ${
-                           visiblePasswordError ? "ring-2 ring-red-100 focus:ring-red-200" : "focus:ring-primary/20"
+                         onChange={handleInputChange}
+                         placeholder="Enter password"
+                         className={`w-full bg-gray-50 border-none rounded-xl py-3.5 pl-12 pr-12 text-xs font-black tracking-tight outline-none transition-all ${
+                           visiblePasswordError ? "ring-1 ring-red-500 focus:ring-red-500" : "focus:ring-2 focus:ring-primary/20"
                          }`}
                        />
                        <button
                          type="button"
                          onClick={() => setShowPassword((current) => !current)}
-                         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 transition hover:text-primary"
+                         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-primary"
                          aria-label={showPassword ? "Hide password" : "Show password"}
                        >
                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                        </button>
                     </div>
-                    {visiblePasswordError && <p className="text-[9px] font-bold text-red-500">{passwordValidationMessage}</p>}
+                    <p className={`text-[9px] font-bold uppercase tracking-widest ${visiblePasswordError ? "text-red-500" : "text-gray-400"}`}>
+                      {visiblePasswordError || "Required. Use a unique password with 8 or more characters."}
+                    </p>
                  </div>
 
                  <div className="space-y-2">
@@ -361,7 +361,6 @@ export default function CreateEmployeePage() {
                     <div className="relative">
                        <select 
                          name="gender"
-                         required
                          value={formData.gender}
                          onChange={handleInputChange}
                          className="w-full bg-gray-50 border-none rounded-xl py-3.5 px-4 text-xs font-black uppercase tracking-tight outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer"
@@ -473,17 +472,9 @@ export default function CreateEmployeePage() {
                  <div className="space-y-2">
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Mobile Number</label>
                     <div className="flex space-x-2">
-                       <select 
-                         name="phone_code" 
-                         value={formData.phone_code}
-                         onChange={handleInputChange}
-                         className="bg-gray-50 border-none rounded-xl px-2 text-xs font-black outline-none focus:ring-2 focus:ring-primary/20"
-                       >
-                          <option value="+1">+1</option>
-                          <option value="+44">+44</option>
-                          <option value="+91">+91</option>
-                          <option value="+92">+92</option>
-                       </select>
+                       <div className="flex h-[46px] min-w-16 items-center justify-center rounded-xl bg-gray-50 px-3 text-xs font-black text-gray-700">
+                         +92
+                       </div>
                        <div className="relative flex-1">
                           <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                           <input 
@@ -497,25 +488,21 @@ export default function CreateEmployeePage() {
                     </div>
                  </div>
 
-                 <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Language</label>
-                    <div className="relative">
-                       <Languages className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
-                       <select 
-                         name="locale"
-                         value={formData.locale}
-                         onChange={handleInputChange}
-                         className="w-full bg-gray-50 border-none rounded-xl py-3.5 pl-12 pr-10 text-xs font-black uppercase tracking-tight outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer"
-                       >
-                          <option value="en">English</option>
-                          <option value="fr">French</option>
-                          <option value="es">Spanish</option>
-                       </select>
-                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300 pointer-events-none" />
-                    </div>
-                 </div>
               </div>
            </Card>
+
+           <EmployeePermissionMatrix
+             role={formData.role}
+             permissions={formData.permissions}
+             onRoleChange={(role) =>
+               setFormData((prev) => ({
+                 ...prev,
+                 role,
+                 permissions: rolePermissions[role] as PermissionKey[],
+               }))
+             }
+             onPermissionsChange={(permissions) => setFormData((prev) => ({ ...prev, permissions }))}
+           />
 
            {/* Section 3: Extra Details */}
            <Card className="p-8 border-none shadow-sm bg-white rounded-2xl">
@@ -583,15 +570,6 @@ export default function CreateEmployeePage() {
                     </div>
                  </div>
               </div>
-           </Card>
-
-           <Card className="p-0 border-none shadow-sm bg-white rounded-2xl overflow-hidden">
-              <EmployeePermissionMatrix
-                role={formData.role}
-                permissions={formData.permissions}
-                onRoleChange={(role) => setFormData((current) => ({ ...current, role, permissions: rolePermissions[role] }))}
-                onPermissionsChange={(permissions) => setFormData((current) => ({ ...current, permissions }))}
-              />
            </Card>
 
            {/* Submit Action */}
