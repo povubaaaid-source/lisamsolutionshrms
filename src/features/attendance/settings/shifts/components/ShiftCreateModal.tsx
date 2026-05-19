@@ -42,6 +42,7 @@ type ShiftCreateModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onCreated: (shift: ShiftTypeOption) => void;
+  shift?: ShiftTypeOption | null;
 };
 
 const emptyForm: ShiftFormValues = {
@@ -71,6 +72,20 @@ const autoAttendanceOptions: Array<{ label: string; value: ShiftFormValues["auto
   { label: "Manual Review", value: "manual-review" },
   { label: "Disabled", value: "disabled" },
 ];
+
+const toFormValues = (shift?: ShiftTypeOption | null): ShiftFormValues => ({
+  shift_name: shift?.shift_name || "",
+  type: shift?.type || "fixed",
+  start_time: shift?.start_time || "09:00",
+  end_time: shift?.end_time || "18:00",
+  break_minutes: String(shift?.break_minutes ?? 60),
+  late_grace_minutes: String(shift?.late_grace_minutes ?? 15),
+  early_clock_in_minutes: String(shift?.early_clock_in_minutes ?? 30),
+  half_day_mark_time: shift?.half_day_mark_time || "13:00",
+  min_hours: String(shift?.min_hours ?? 8),
+  auto_attendance: shift?.auto_attendance || "enabled",
+  status: shift?.status || "active",
+});
 
 const toNumber = (value: string, fallback = 0) => {
   const parsed = Number(value);
@@ -115,10 +130,11 @@ const normalizeShiftPayload = (form: ShiftFormValues): Omit<ShiftTypeOption, "id
   };
 };
 
-export default function ShiftCreateModal({ isOpen, onClose, onCreated }: ShiftCreateModalProps) {
+export default function ShiftCreateModal({ isOpen, onClose, onCreated, shift }: ShiftCreateModalProps) {
   const { showToast } = useToast();
-  const [formValues, setFormValues] = useState<ShiftFormValues>(emptyForm);
+  const [formValues, setFormValues] = useState<ShiftFormValues>(() => toFormValues(shift));
   const [saving, setSaving] = useState(false);
+  const isEditing = Boolean(shift);
 
   const updateField = (field: keyof ShiftFormValues, value: string) => {
     setFormValues((current) => ({ ...current, [field]: value }));
@@ -140,16 +156,18 @@ export default function ShiftCreateModal({ isOpen, onClose, onCreated }: ShiftCr
 
     setSaving(true);
     try {
-      const response = await api.post("/shift-types", payload);
-      const created = extractCreatedShift(response.data) ?? { id: Date.now(), ...payload };
-      onCreated(created);
-      showToast("Shift created successfully.", "success");
+      const response = isEditing && shift
+        ? await api.put(`/shift-types/${shift.id}`, payload)
+        : await api.post("/shift-types", payload);
+      const saved = extractCreatedShift(response.data) ?? { id: shift?.id || Date.now(), ...payload };
+      onCreated(saved);
+      showToast(isEditing ? "Shift updated successfully." : "Shift created successfully.", "success");
       closeAndReset();
     } catch (error) {
       console.error("Create Shift Error:", error);
-      const created = { id: Date.now(), ...payload };
-      onCreated(created);
-      showToast("Shift saved locally.", "success");
+      const saved = { id: shift?.id || Date.now(), ...payload };
+      onCreated(saved);
+      showToast(isEditing ? "Shift updated locally." : "Shift saved locally.", "success");
       closeAndReset();
     } finally {
       setSaving(false);
@@ -157,7 +175,7 @@ export default function ShiftCreateModal({ isOpen, onClose, onCreated }: ShiftCr
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeAndReset} title="Create Shift" size="lg">
+    <Modal isOpen={isOpen} onClose={closeAndReset} title={isEditing ? "Edit Shift" : "Create Shift"} size="lg">
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <label className="space-y-2">
@@ -222,7 +240,7 @@ export default function ShiftCreateModal({ isOpen, onClose, onCreated }: ShiftCr
             Cancel
           </Button>
           <Button type="submit" loading={saving} className="h-12 flex-1 bg-primary text-[10px] font-black uppercase tracking-widest text-white">
-            Save Shift
+            {isEditing ? "Update Shift" : "Save Shift"}
           </Button>
         </div>
       </form>

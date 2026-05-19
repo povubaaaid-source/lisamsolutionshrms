@@ -232,9 +232,9 @@ const menuItems: MenuItem[] = [
     submenu: [
       { label: "Settings Home", href: "/settings" },
       { label: "Account Setup", href: "/account-setup" },
-      { label: "Role Permissions", href: "/role-permission" },
-      { label: "Custom Fields", href: "/custom-fields" },
-      { label: "Module Settings", href: "/module-settings" },
+      // { label: "Role Permissions", href: "/role-permission" },
+      // { label: "Custom Fields", href: "/custom-fields" },
+      // { label: "Module Settings", href: "/module-settings" },
     ],
   },
   { icon: Search, label: "Search", href: "/search" },
