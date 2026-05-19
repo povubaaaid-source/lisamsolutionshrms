@@ -58,7 +58,7 @@ const basePermissionModules: PermissionModuleDefinition[] = [
   { key: "tasks", label: "Tasks", group: "work", actions: ["view", "create", "edit", "delete", "export", "manage"] },
   { key: "leads", label: "Leads", group: "core", actions: ["view", "create", "edit", "delete", "export", "manage"] },
   { key: "contracts", label: "Contracts", group: "work", actions: ["view", "create", "edit", "delete", "export"] },
-  { key: "products", label: "Products", group: "finance", actions: ["view", "create", "edit", "delete", "export"] },
+  // { key: "products", label: "Products", group: "finance", actions: ["view", "create", "edit", "delete", "export"] },
   { key: "finance", label: "Finance", group: "finance", actions: ["view", "create", "edit", "delete", "approve", "export", "manage"] },
   { key: "payroll", label: "Payroll", group: "finance", actions: ["view", "create", "edit", "approve", "export", "manage"] },
   { key: "tickets", label: "Tickets", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
@@ -68,9 +68,9 @@ const basePermissionModules: PermissionModuleDefinition[] = [
   { key: "events", label: "Events", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
   { key: "notices", label: "Notice Board", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
   { key: "billing", label: "Billing", group: "finance", actions: ["view", "create", "edit", "delete", "manage"] },
-  { key: "faq", label: "FAQ", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
+  // { key: "faq", label: "FAQ", group: "communication", actions: ["view", "create", "edit", "delete", "manage"] },
   { key: "settings", label: "Settings", group: "settings", actions: ["view", "edit", "manage"] },
-  { key: "roles", label: "Roles & Permissions", group: "settings", actions: ["view", "create", "edit", "delete", "manage"] },
+  // { key: "roles", label: "Roles & Permissions", group: "settings", actions: ["view", "create", "edit", "delete", "manage"] },
 ];
 
 export const permissionModules = basePermissionModules.filter(
