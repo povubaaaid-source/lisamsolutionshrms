@@ -123,26 +123,6 @@ export default function EmployeePermissionMatrix({
             {getModulesFromPermissions(normalizedPermissions).length} modules selected
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={role}
-            onChange={(event) => handleRoleChange(event.target.value as EmployeeAssignableRole)}
-            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-[10px] font-black uppercase tracking-widest text-gray-600 outline-none transition focus:border-primary/30 focus:text-primary"
-          >
-            <option value="employee">Employee Role</option>
-            <option value="admin">Admin Role</option>
-          </select>
-          {permissionTemplates.map((template) => (
-            <button
-              key={template.id}
-              type="button"
-              onClick={() => applyTemplate(template)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-widest text-gray-500 transition hover:border-primary/30 hover:text-primary focus:border-primary/30 focus:text-primary"
-            >
-              {template.label}
-            </button>
-          ))}
-        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
