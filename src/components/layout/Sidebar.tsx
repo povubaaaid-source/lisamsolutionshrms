@@ -177,7 +177,7 @@ const menuItems: MenuItem[] = [
       { label: "Salary Settings", href: "/payroll/settings" },
     ],
   },
-  { icon: ShoppingBag, label: "Products", href: "/products" },
+  // { icon: ShoppingBag, label: "Products", href: "/products" },
   {
     icon: Ticket,
     label: "Tickets",

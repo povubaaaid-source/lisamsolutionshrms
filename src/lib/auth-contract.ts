@@ -257,7 +257,7 @@ export const roleRouteRules: RoleRouteRule[] = [
     roles: ["admin"],
   },
   {
-    prefixes: ["/employees", "/teams", "/designation", "/shift-types", "/attendance-settings", "/leaves-settings"],
+    prefixes: ["/employees", "/teams", "/designation", "/attendance/settings/shifts", "/attendance-settings", "/leaves-settings"],
     roles: ["admin"],
   },
   {
@@ -327,7 +327,7 @@ export const permissionRouteRules: PermissionRouteRule[] = [
   { prefixes: ["/faqs", "/employees/faq"], anyOf: ["faq.view", "faq.manage"] },
   { prefixes: ["/employees"], anyOf: ["employees.view", "employees.manage"] },
   { prefixes: ["/teams", "/designation", "/attendance-settings"], anyOf: ["hr.view", "hr.manage"] },
-  { prefixes: ["/shift-types"], anyOf: ["shifts.view", "shifts.manage"] },
+  { prefixes: ["/attendance/settings/shifts"], anyOf: ["shifts.view", "shifts.manage"] },
   { prefixes: ["/leaves/all", "/leaves/settings", "/leave-type"], anyOf: ["leaves.view", "leaves.manage", "leaves.approve"] },
   { prefixes: ["/attendance/bulk"], anyOf: ["attendance.create", "attendance.manage"] },
   { prefixes: ["/attendance"], anyOf: ["attendance.view", "attendance.manage"] },

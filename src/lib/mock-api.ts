@@ -152,7 +152,6 @@ const seedStore: MockStore = {
         shift_type: {
           id: 1,
           shift_name: "General Day Shift",
-          code: "DAY",
           type: "fixed",
           start_time: "09:00",
           end_time: "18:00",
@@ -179,7 +178,6 @@ const seedStore: MockStore = {
         shift_type: {
           id: 3,
           shift_name: "Flexible Remote Shift",
-          code: "FLEX",
           type: "flexible",
           start_time: "10:00",
           end_time: "19:00",
@@ -206,7 +204,6 @@ const seedStore: MockStore = {
         shift_type: {
           id: 1,
           shift_name: "General Day Shift",
-          code: "DAY",
           type: "fixed",
           start_time: "09:00",
           end_time: "18:00",
@@ -972,7 +969,6 @@ const seedStore: MockStore = {
     {
       id: 1,
       shift_name: "General Day Shift",
-      code: "DAY",
       type: "fixed",
       start_time: "09:00",
       end_time: "18:00",
@@ -983,14 +979,23 @@ const seedStore: MockStore = {
       min_hours: 8,
       auto_attendance: "enabled",
       status: "active",
-      color: "#03a9f3",
-      description: "Default office shift for weekday staff.",
+      device_sync_enabled: false,
+      device_sync_mode: "disabled",
+      attendance_machine_payload: {
+        enabled: false,
+        sync_mode: "disabled",
+        shift_name: "General Day Shift",
+        start_time: "09:00",
+        end_time: "18:00",
+        late_grace_minutes: 15,
+        half_day_mark_time: "13:00",
+        min_hours: 8,
+      },
       created_at: now,
     },
     {
       id: 2,
       shift_name: "Night Support Shift",
-      code: "NIGHT",
       type: "night",
       start_time: "22:00",
       end_time: "06:00",
@@ -1001,14 +1006,23 @@ const seedStore: MockStore = {
       min_hours: 7.5,
       auto_attendance: "enabled",
       status: "active",
-      color: "#6366f1",
-      description: "Overnight coverage shift for support and operations.",
+      device_sync_enabled: false,
+      device_sync_mode: "disabled",
+      attendance_machine_payload: {
+        enabled: false,
+        sync_mode: "disabled",
+        shift_name: "Night Support Shift",
+        start_time: "22:00",
+        end_time: "06:00",
+        late_grace_minutes: 10,
+        half_day_mark_time: "02:00",
+        min_hours: 7.5,
+      },
       created_at: now,
     },
     {
       id: 3,
       shift_name: "Flexible Remote Shift",
-      code: "FLEX",
       type: "flexible",
       start_time: "10:00",
       end_time: "19:00",
@@ -1019,8 +1033,18 @@ const seedStore: MockStore = {
       min_hours: 8,
       auto_attendance: "manual-review",
       status: "active",
-      color: "#10b981",
-      description: "Flexible attendance window for remote employees.",
+      device_sync_enabled: false,
+      device_sync_mode: "disabled",
+      attendance_machine_payload: {
+        enabled: false,
+        sync_mode: "disabled",
+        shift_name: "Flexible Remote Shift",
+        start_time: "10:00",
+        end_time: "19:00",
+        late_grace_minutes: 30,
+        half_day_mark_time: "14:00",
+        min_hours: 8,
+      },
       created_at: now,
     },
   ],
@@ -1359,10 +1383,9 @@ const filterRecords = (records: MockRecord[], searchParams: URLSearchParams) => 
 
 const makeShiftSummary = (shiftType?: MockRecord) =>
   shiftType
-    ? {
+      ? {
         id: shiftType.id,
         shift_name: shiftType.shift_name,
-        code: shiftType.code,
         type: shiftType.type,
         start_time: shiftType.start_time,
         end_time: shiftType.end_time,
@@ -1370,6 +1393,9 @@ const makeShiftSummary = (shiftType?: MockRecord) =>
         late_grace_minutes: shiftType.late_grace_minutes,
         half_day_mark_time: shiftType.half_day_mark_time,
         min_hours: shiftType.min_hours,
+        device_sync_enabled: shiftType.device_sync_enabled,
+        device_sync_mode: shiftType.device_sync_mode,
+        attendance_machine_payload: shiftType.attendance_machine_payload,
       }
     : undefined;
 

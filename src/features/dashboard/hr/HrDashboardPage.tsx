@@ -457,7 +457,7 @@ export default function HRDashboard() {
                   Employee assignment coverage used by attendance defaults
                 </p>
               </div>
-              <Link href="/shift-types" className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline">
+              <Link href="/attendance/settings/shifts" className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline">
                 Manage Shifts
               </Link>
             </div>
@@ -470,7 +470,7 @@ export default function HRDashboard() {
                       <div>
                         <p className="text-xs font-black uppercase tracking-widest text-gray-800">{shift.shift_name}</p>
                         <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                          {shift.code || "SHIFT"} - {shift.start_time || "--:--"} to {shift.end_time || "--:--"}
+                          {shift.start_time || "--:--"} to {shift.end_time || "--:--"}
                           {isOvernightShift(shift) ? " - Overnight" : ""}
                         </p>
                       </div>

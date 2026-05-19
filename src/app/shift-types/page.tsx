@@ -1,5 +1,5 @@
-import ShiftTypesPage from "@/features/shift-types/ShiftTypesPage";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <ShiftTypesPage />;
+  redirect("/attendance/settings/shifts");
 }

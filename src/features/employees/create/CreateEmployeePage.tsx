@@ -19,7 +19,9 @@ import {
   Info,
   ChevronDown,
   RefreshCw,
-  Clock
+  Clock,
+  UserCheck,
+  UserX
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Button from "@/components/ui/Button";
@@ -29,6 +31,7 @@ import { getModulesFromPermissions, rolePermissions, type PermissionKey } from "
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
 import EmployeePermissionMatrix, { type EmployeeAssignableRole } from "@/features/employees/components/EmployeePermissionMatrix";
+import ShiftCreateModal, { type ShiftTypeOption } from "@/features/attendance/settings/shifts/components/ShiftCreateModal";
 
 const PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
 
@@ -70,14 +73,6 @@ export default function CreateEmployeePage() {
     name: string;
   };
 
-  type ShiftTypeOption = {
-    id: number | string;
-    shift_name: string;
-    code?: string;
-    start_time?: string;
-    end_time?: string;
-  };
-  
   // Form Options
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [designations, setDesignations] = useState<DesignationOption[]>([]);
@@ -103,11 +98,13 @@ export default function CreateEmployeePage() {
     hourly_rate: "",
     role: "employee" as EmployeeAssignableRole,
     permissions: rolePermissions.employee as PermissionKey[],
+    status: "active" as "active" | "deactive",
     login: "enable",
     email_notifications: "1",
   });
 
   const [generateRandom, setGenerateRandom] = useState(false);
+  const [isShiftCreateOpen, setIsShiftCreateOpen] = useState(false);
   const passwordValidationMessage = validateEmployeePassword(
     formData.password,
     formData.name,
@@ -145,7 +142,7 @@ export default function CreateEmployeePage() {
         }
         if ((shiftRes.data.data || []).length === 0) {
           setShiftTypes([
-            { id: 1, shift_name: "General Day Shift", code: "DAY", start_time: "09:00", end_time: "18:00" },
+            { id: 1, shift_name: "General Day Shift", type: "fixed", start_time: "09:00", end_time: "18:00" },
           ]);
         }
       } catch (err) {
@@ -174,6 +171,11 @@ export default function CreateEmployeePage() {
       setShowPassword(false);
       setFormData(prev => ({ ...prev, password: "" }));
     }
+  };
+
+  const handleShiftCreated = (shift: ShiftTypeOption) => {
+    setShiftTypes((current) => [shift, ...current.filter((item) => String(item.id) !== String(shift.id))]);
+    setFormData((prev) => ({ ...prev, shift_type_id: String(shift.id) }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -417,7 +419,16 @@ export default function CreateEmployeePage() {
 
 
                  <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Shift Type</label>
+                    <label className="flex items-center justify-between gap-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                       <span>Shift Type</span>
+                       <button
+                         type="button"
+                         onClick={() => setIsShiftCreateOpen(true)}
+                         className="rounded-lg bg-primary/10 px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-primary transition hover:bg-primary hover:text-white"
+                       >
+                         New Shift
+                       </button>
+                    </label>
                     <div className="relative">
                        <Clock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                        <select
@@ -436,7 +447,7 @@ export default function CreateEmployeePage() {
                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300 pointer-events-none" />
                     </div>
                     <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
-                      Used for late, half-day, and overnight attendance calculations.
+                      Create a shift here and it will be selected for this employee immediately.
                     </p>
                  </div>
 
@@ -568,6 +579,29 @@ export default function CreateEmployeePage() {
                           <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary shadow-inner"></div>
                        </label>
                     </div>
+
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                       <div className="flex items-center space-x-4">
+                          <div className="h-10 w-10 bg-white rounded-xl shadow-sm flex items-center justify-center">
+                             {formData.status === "active" ? <UserCheck className="h-5 w-5 text-green-500" /> : <UserX className="h-5 w-5 text-red-500" />}
+                          </div>
+                          <div>
+                             <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest">Employee Status</p>
+                             <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">
+                               {formData.status === "active" ? "Active account" : "Deactivated account"}
+                             </p>
+                          </div>
+                       </div>
+                       <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={formData.status === "active"}
+                            onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.checked ? "active" : "deactive" }))}
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary shadow-inner"></div>
+                       </label>
+                    </div>
                  </div>
               </div>
            </Card>
@@ -592,6 +626,11 @@ export default function CreateEmployeePage() {
            </div>
         </form>
       </div>
+      <ShiftCreateModal
+        isOpen={isShiftCreateOpen}
+        onClose={() => setIsShiftCreateOpen(false)}
+        onCreated={handleShiftCreated}
+      />
     </DashboardLayout>
   );
 }

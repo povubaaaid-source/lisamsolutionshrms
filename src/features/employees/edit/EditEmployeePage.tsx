@@ -6,14 +6,15 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import api from "@/lib/api";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/context/ToastContext";
-import { RefreshCw, Save, ArrowLeft, AlertCircle, Clock, Eye, EyeOff } from "lucide-react";
+import { RefreshCw, Save, ArrowLeft, AlertCircle, Clock, Eye, EyeOff, Plus, UserCheck, UserX } from "lucide-react";
 import { Employee } from "@/types";
 import { getModulesFromPermissions, rolePermissions, type PermissionKey } from "@/lib/auth-contract";
 import EmployeePermissionMatrix, { type EmployeeAssignableRole } from "@/features/employees/components/EmployeePermissionMatrix";
+import ShiftCreateModal, { type ShiftTypeOption } from "@/features/attendance/settings/shifts/components/ShiftCreateModal";
 
 const employeeSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -29,6 +30,7 @@ const employeeSchema = z.object({
   designation_id: z.string().min(1, "Please select a designation"),
   shift_type_id: z.string().optional(),
   role: z.enum(["admin", "employee"]),
+  status: z.enum(["active", "deactive"]),
   mobile: z.string().optional(),
   address: z.string().optional(),
 }).superRefine((data, ctx) => {
@@ -60,18 +62,11 @@ type DesignationOption = {
   name: string;
 };
 
-type ShiftTypeOption = {
-  id: number | string;
-  shift_name: string;
-  code?: string;
-  start_time?: string;
-  end_time?: string;
-};
-
 type EmployeeUpdatePayload = {
   name: string;
   email: string;
   role: EmployeeAssignableRole;
+  status: "active" | "deactive";
   password?: string;
   gender: string;
   permissions: PermissionKey[];
@@ -106,6 +101,7 @@ export default function EditEmployeePage() {
   const [designations, setDesignations] = useState<DesignationOption[]>([]);
   const [shiftTypes, setShiftTypes] = useState<ShiftTypeOption[]>([]);
   const [showPassword, setShowPassword] = useState(false);
+  const [isShiftCreateOpen, setIsShiftCreateOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<EmployeeAssignableRole>("employee");
   const [permissionState, setPermissionState] = useState<PermissionKey[]>(rolePermissions.employee);
 
@@ -114,15 +110,22 @@ export default function EditEmployeePage() {
     handleSubmit,
     reset,
     setValue,
+    control,
     formState: { errors },
   } = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
     defaultValues: {
       role: "employee",
+      status: "active",
       gender: "",
       password: "",
     },
   });
+  const employeeStatus = useWatch({ control, name: "status" });
+
+  useEffect(() => {
+    register("status");
+  }, [register]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -154,6 +157,7 @@ export default function EditEmployeePage() {
           designation_id: data.employee_detail?.designation_id?.toString() || "",
           shift_type_id: data.employee_detail?.shift_type_id?.toString() || "",
           role,
+          status: data.status === "deactive" ? "deactive" : "active",
           password: "",
           mobile: data.employee_detail?.mobile || "",
           address: data.employee_detail?.address || "",
@@ -168,6 +172,11 @@ export default function EditEmployeePage() {
     fetchData();
   }, [params.id, reset, showToast]);
 
+  const handleShiftCreated = (shift: ShiftTypeOption) => {
+    setShiftTypes((current) => [shift, ...current.filter((item) => String(item.id) !== String(shift.id))]);
+    setValue("shift_type_id", String(shift.id), { shouldDirty: true, shouldValidate: true });
+  };
+
   const onSubmit = async (data: EmployeeFormValues) => {
     setSaving(true);
     try {
@@ -177,6 +186,7 @@ export default function EditEmployeePage() {
         name: data.name,
         email: data.email,
         role: data.role,
+        status: data.status,
         gender: data.gender,
         permissions,
         modules,
@@ -359,7 +369,17 @@ export default function EditEmployeePage() {
                        {errors.designation_id && <p className="text-[9px] text-red-500 mt-1 font-bold">{errors.designation_id.message}</p>}
                     </div>
                     <div className="space-y-1.5">
-                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Shift Type</label>
+                       <div className="flex items-center justify-between gap-3">
+                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Shift Type</label>
+                         <button
+                           type="button"
+                           onClick={() => setIsShiftCreateOpen(true)}
+                           className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-primary transition hover:bg-primary hover:text-white"
+                         >
+                           <Plus className="h-3 w-3" />
+                           New Shift
+                         </button>
+                       </div>
                        <div className="relative">
                           <Clock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
                           <select
@@ -406,8 +426,30 @@ export default function EditEmployeePage() {
                  <div className="h-32 w-32 rounded-3xl bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center text-primary text-3xl font-black shadow-inner border border-primary/5 mx-auto mb-6 relative group overflow-hidden uppercase">
                     {employee.name.charAt(0)}
                  </div>
-                 <div className="bg-green-50 text-green-600 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border border-green-100 mb-4">
-                    Active Account
+                 <div className={`${employeeStatus === "active" ? "bg-green-50 text-green-600 border-green-100" : "bg-red-50 text-red-600 border-red-100"} mb-4 rounded-xl border py-3 text-[10px] font-black uppercase tracking-widest`}>
+                    {employeeStatus === "active" ? "Active Account" : "Deactivated Account"}
+                 </div>
+                 <div className="mb-6 flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50 p-4 text-left">
+                    <div className="flex items-center gap-3">
+                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
+                          {employeeStatus === "active" ? <UserCheck className="h-5 w-5 text-green-500" /> : <UserX className="h-5 w-5 text-red-500" />}
+                       </div>
+                       <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-gray-800">Employee Status</p>
+                          <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-gray-400">
+                            {employeeStatus === "active" ? "Can access active workflows" : "Access and payroll eligibility paused"}
+                          </p>
+                       </div>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                       <input
+                          type="checkbox"
+                          className="peer sr-only"
+                          checked={employeeStatus === "active"}
+                          onChange={(event) => setValue("status", event.target.checked ? "active" : "deactive", { shouldDirty: true, shouldValidate: true })}
+                       />
+                       <div className="h-6 w-11 rounded-full bg-gray-200 shadow-inner after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-primary peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none"></div>
+                    </label>
                  </div>
                  <div className="space-y-1.5 text-left">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Update Password</label>
@@ -448,6 +490,11 @@ export default function EditEmployeePage() {
            </div>
         </form>
       </div>
+      <ShiftCreateModal
+        isOpen={isShiftCreateOpen}
+        onClose={() => setIsShiftCreateOpen(false)}
+        onCreated={handleShiftCreated}
+      />
     </DashboardLayout>
   );
 }
