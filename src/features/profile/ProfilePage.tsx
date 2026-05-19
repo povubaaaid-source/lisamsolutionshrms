@@ -2,34 +2,31 @@
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Button from "@/components/ui/Button";
+import Image from "next/image";
 import { 
   User, 
-  Mail, 
-  Lock, 
-  MapPin, 
-  Bell, 
   Image as ImageIcon,
   Save,
-  Check,
   Eye,
   EyeOff,
   Calendar,
   Fingerprint
 } from "lucide-react";
-import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import { useState, type FormEvent } from "react";
 import { useToast } from "@/context/ToastContext";
 import AttendanceIdentityCard from "@/components/attendance/employee/AttendanceIdentityCard";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ProfilePage() {
   const { showToast } = useToast();
+  const { user, updateUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [profile, setProfile] = useState({
-    name: "Admin User",
-    email: "admin@lisam.com",
+    name: user?.name || "User",
+    email: user?.email || "",
     password: "",
-    address: "123 Business Rd, Suite 100",
+    address: "",
     emailNotifications: "1",
     image: null as string | null
   });
@@ -44,13 +41,17 @@ export default function ProfilePage() {
     holidays: false
   });
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  const handleUpdate = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // Logic for profile update
+      updateUser({
+        name: profile.name,
+        email: profile.email,
+      });
       showToast("Profile updated successfully", "success");
     } catch (err) {
+      console.error("Profile update error:", err);
       showToast("Failed to update profile", "error");
     } finally {
       setLoading(false);
@@ -116,7 +117,7 @@ export default function ProfilePage() {
                                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
                         </div>
-                        <span className="text-[10px] text-gray-400 mt-1 block italic font-medium">Leave blank if you don't want to change password.</span>
+                        <span className="text-[10px] text-gray-400 mt-1 block italic font-medium">Leave blank if you do not want to change password.</span>
                     </div>
                 </div>
 
@@ -163,7 +164,7 @@ export default function ProfilePage() {
                     <div className="flex items-start space-x-6">
                         <div className="h-40 w-56 border border-[#e4e7ea] rounded bg-gray-50 flex items-center justify-center overflow-hidden">
                             {profile.image ? (
-                                <img src={profile.image} alt="Profile" className="h-full w-full object-cover" />
+                                <Image src={profile.image} alt="Profile" width={224} height={160} unoptimized className="h-full w-full object-cover" />
                             ) : (
                                 <ImageIcon className="h-12 w-12 text-gray-200" />
                             )}

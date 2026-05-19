@@ -1666,6 +1666,9 @@ const makeEmployeePayload = (store: MockStore, payload: Record<string, unknown>,
   const departmentName = String(payload.department_name || departmentRecord?.team_name || departmentRecord?.name || existingDepartment.team_name || existingDepartment.name || payload.department || "General");
   const shiftTypeId = detailPayload.shift_type_id || payload.shift_type_id || payload.shift_id || existingDetail.shift_type_id;
   const shiftType = store["shift-types"].find((record) => String(record.id) === String(shiftTypeId));
+  const role = normalizeRole(String(payload.role || existing?.role || "employee")) === "admin" ? "admin" : "employee";
+  const permissions = normalizePermissionList(payload.permissions, normalizePermissionList(existing?.permissions, rolePermissions[role]));
+  const modules = Array.isArray(payload.modules) ? payload.modules.map((module) => String(module)) : getModulesFromPermissions(permissions);
 
   return {
     ...(existing || {}),
@@ -1673,7 +1676,9 @@ const makeEmployeePayload = (store: MockStore, payload: Record<string, unknown>,
     ...payload,
     name: fullName,
     email: String(payload.email || existing?.email || `employee-${id}@example.com`),
-    role: normalizeRole(String(payload.role || existing?.role || "employee")) === "admin" ? "admin" : "employee",
+    role,
+    permissions,
+    modules,
     status: String(payload.status || existing?.status || "active"),
     employee_detail: {
       ...existingDetail,
@@ -2198,7 +2203,12 @@ const makeGenericPayload = (store: MockStore, resource: string, payload: Record<
 const login = (store: MockStore, payload: Record<string, unknown>) => {
   const email = String(payload.email || "admin@company.com");
   const admin = (store.admins || []).find((record) => String(record.email || "").toLowerCase() === email.toLowerCase());
+  const employee = (store.employees || []).find((record) => String(record.email || "").toLowerCase() === email.toLowerCase());
+  const client = (store.clients || []).find((record) => String(record.email || "").toLowerCase() === email.toLowerCase());
   const adminCompanyId = typeof admin?.company_id === "string" || typeof admin?.company_id === "number" ? admin.company_id : null;
+  const employeeRole = employee ? normalizeRole(String(employee.role || "employee")) : "employee";
+  const employeePermissions = employee ? normalizePermissionList(employee.permissions, rolePermissions[employeeRole]) : [];
+  const clientPermissions = client ? normalizePermissionList(client.permissions, rolePermissions.client) : [];
   const user: AuthUser = admin
     ? {
         id: admin.id,
@@ -2209,6 +2219,26 @@ const login = (store: MockStore, payload: Record<string, unknown>) => {
         permissions: normalizePermissionList(admin.permissions, []),
         modules: Array.isArray(admin.modules) ? (admin.modules as string[]) : getModulesFromPermissions(normalizePermissionList(admin.permissions, [])),
       }
+    : employee
+      ? {
+          id: employee.id,
+          name: String(employee.name || "Employee"),
+          email: String(employee.email || email),
+          role: employeeRole,
+          company_id: typeof employee.company_id === "string" || typeof employee.company_id === "number" ? employee.company_id : 1,
+          permissions: employeePermissions,
+          modules: Array.isArray(employee.modules) ? (employee.modules as string[]) : getModulesFromPermissions(employeePermissions),
+        }
+      : client
+        ? {
+            id: client.id,
+            name: String(client.name || getNestedObject(client.client_detail).company_name || "Client"),
+            email: String(client.email || email),
+            role: "client",
+            company_id: typeof client.company_id === "string" || typeof client.company_id === "number" ? client.company_id : 1,
+            permissions: clientPermissions,
+            modules: Array.isArray(client.modules) ? (client.modules as string[]) : getModulesFromPermissions(clientPermissions),
+          }
     : makeDevUserFromEmail(email);
   const token = `mock_${user.role}_${Date.now()}`;
 

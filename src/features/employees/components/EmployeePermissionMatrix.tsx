@@ -5,58 +5,12 @@ import {
   getModulesFromPermissions,
   permissionActions,
   permissionKey,
-  rolePermissions,
   type PermissionAction,
   type PermissionKey,
   type PermissionModuleDefinition,
 } from "@/lib/auth-contract";
 
 export type EmployeeAssignableRole = "admin" | "employee";
-
-type PermissionTemplate = {
-  id: string;
-  label: string;
-  role: EmployeeAssignableRole;
-  permissions: PermissionKey[];
-};
-
-const permissionTemplates: PermissionTemplate[] = [
-  { id: "employee", label: "Employee", role: "employee", permissions: rolePermissions.employee },
-  {
-    id: "hr",
-    label: "HR Role",
-    role: "employee",
-    permissions: [
-      "dashboard.view",
-      "profile.*",
-      "employees.view",
-      "hr.view",
-      "attendance.view",
-      "attendance.create",
-      "leaves.view",
-      "leaves.create",
-      "reports.view",
-      "events.view",
-      "notices.view",
-    ],
-  },
-  {
-    id: "project",
-    label: "Project Role",
-    role: "employee",
-    permissions: [
-      "dashboard.view",
-      "profile.*",
-      "projects.view",
-      "tasks.*",
-      "tickets.*",
-      "messages.*",
-      "events.view",
-      "notices.view",
-    ],
-  },
-  { id: "admin", label: "Admin", role: "admin", permissions: rolePermissions.admin },
-];
 
 const normalizePermissions = (permissions: PermissionKey[]): PermissionKey[] =>
   Array.from(new Set<PermissionKey>(["dashboard.view", "profile.*", ...permissions]));
@@ -97,22 +51,10 @@ type EmployeePermissionMatrixProps = {
 };
 
 export default function EmployeePermissionMatrix({
-  role,
   permissions,
-  onRoleChange,
   onPermissionsChange,
 }: EmployeePermissionMatrixProps) {
   const normalizedPermissions = normalizePermissions(permissions);
-
-  const applyTemplate = (template: PermissionTemplate) => {
-    onRoleChange(template.role);
-    onPermissionsChange(normalizePermissions(template.permissions));
-  };
-
-  const handleRoleChange = (nextRole: EmployeeAssignableRole) => {
-    onRoleChange(nextRole);
-    onPermissionsChange(normalizePermissions(rolePermissions[nextRole]));
-  };
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white">
@@ -123,6 +65,9 @@ export default function EmployeePermissionMatrix({
             {getModulesFromPermissions(normalizedPermissions).length} modules selected
           </p>
         </div>
+        <span className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-widest text-gray-500">
+          Default Employee Access
+        </span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left">

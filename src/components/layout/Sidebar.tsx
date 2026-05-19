@@ -29,7 +29,6 @@ import {
   ChevronDown,
   ChevronUp,
   Power,
-  LogIn,
   User,
   Search,
   Shield,
@@ -254,17 +253,14 @@ const superAdminMenuItems: MenuItem[] = [
 const roleMenuAccess: Record<UserRole, string[]> = {
   super_admin: superAdminMenuItems.map((item) => item.label),
   admin: menuItems.filter((item) => item.label !== "Super Admin").map((item) => item.label),
-  employee: ["Dashboard", "HR", "Work", "Payroll", "Tickets", "Messages", "Events", "Notice Board"],
+  employee: menuItems.filter((item) => item.label !== "Super Admin").map((item) => item.label),
   client: ["Dashboard", "Work", "Finance", "Tickets", "Messages", "Events", "Notice Board"],
 };
 
 const roleSubmenuAccess: Partial<Record<UserRole, Record<string, string[]>>> = {
   employee: {
-    Dashboard: ["Member Dashboard", "Project Dashboard", "Ticket Dashboard"],
-    HR: ["Attendance", "Holidays", "Leaves"],
-    Work: ["Projects", "Tasks", "Task Board", "Task Calendar", "Time Logs", "Discussion"],
+    Dashboard: ["Member Dashboard", "Project Dashboard", "Ticket Dashboard", "HR Dashboard", "Finance Dashboard"],
     Payroll: ["My Payslips"],
-    Tickets: ["Tickets"],
   },
   client: {
     Dashboard: ["Client Dashboard", "Project Dashboard", "Ticket Dashboard"],
@@ -275,7 +271,7 @@ const roleSubmenuAccess: Partial<Record<UserRole, Record<string, string[]>>> = {
 };
 
 const canOpenItem = (user: AuthUser | null, userRole: UserRole, item: MenuItem) => {
-  if (userRole !== "admin") return true;
+  if (userRole === "super_admin") return true;
   if (!user) return false;
   if (canUserAccessPath(user, item.href)) return true;
   return Boolean(item.submenu?.some((sub) => canUserAccessPath(user, sub.href)));
@@ -298,8 +294,8 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { user, logout, stopImpersonation } = useAuth();
   const [hasHydrated, setHasHydrated] = useState(false);
-  const userRole = hasHydrated ? user?.role || "admin" : "admin";
-  const userName = hasHydrated ? user?.name || "Admin User" : "Admin User";
+  const userRole = hasHydrated ? user?.role || "employee" : "employee";
+  const userName = hasHydrated ? user?.name || "User" : "User";
 
   const filteredMenuItems = useMemo(() => {
     if (userRole === "super_admin") {
@@ -330,13 +326,12 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
           .filter((sub) => !allowedSubmenuLabels || allowedSubmenuLabels.includes(sub.label))
           .map((sub) => (normalizedItem.label === "Dashboard" && sub.label === "Dashboard" ? { ...sub, href: roleDashboardHref } : sub));
 
-        const permissionFilteredSubmenu =
-          userRole === "admin" && user
-            ? roleFilteredSubmenu?.filter((sub) => canUserAccessPath(user, sub.href))
-            : roleFilteredSubmenu;
+        const permissionFilteredSubmenu = user
+          ? roleFilteredSubmenu?.filter((sub) => canUserAccessPath(user, sub.href))
+          : roleFilteredSubmenu;
 
         const href =
-          userRole === "admin" && user && !canUserAccessPath(user, normalizedItem.href) && permissionFilteredSubmenu?.length
+          user && !canUserAccessPath(user, normalizedItem.href) && permissionFilteredSubmenu?.length
             ? permissionFilteredSubmenu[0].href
             : normalizedItem.href;
 
@@ -554,11 +549,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                     <button type="button" onClick={stopImpersonation} className="flex w-full items-center space-x-3 px-3 py-2.5 rounded-xl text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 transition-all">
                       <Shield className="h-4 w-4" /> <span>Return to Super Admin</span>
                     </button>
-                  )}
-                  {userRole === "admin" && (
-                    <Link href="/member/dashboard" onClick={onMobileClose} className="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-all">
-                      <LogIn className="h-4 w-4" /> <span>Login as Employee</span>
-                    </Link>
                   )}
                   <button type="button" onClick={logout} className="flex w-full items-center space-x-3 px-3 py-2.5 rounded-xl text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all">
                     <Power className="h-4 w-4" /> <span>Logout</span>

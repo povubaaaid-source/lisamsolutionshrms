@@ -254,23 +254,23 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/billing", "/payroll", "/payment-gateway-credentials", "/email-settings", "/invoice-settings"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/employees", "/teams", "/designation", "/attendance/settings/shifts", "/attendance-settings", "/leaves-settings"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/leaves/all", "/leaves/settings", "/leave-type"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/attendance/bulk"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/holidays/create"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/attendance", "/leaves", "/holidays"],
@@ -278,7 +278,7 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/clients", "/client-contacts", "/client-settings"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/dashboard/client"],
@@ -286,23 +286,23 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/dashboard/hr", "/dashboard/finance", "/dashboard/project", "/dashboard/ticket"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/invoices", "/estimates", "/proposals", "/credit-notes", "/payments", "/expenses", "/invoice-recurring", "/expenses-recurring"],
-    roles: ["admin", "client"],
+    roles: ["admin", "employee", "client"],
   },
   {
     prefixes: ["/leads", "/lead-form", "/lead-settings"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/recruitment"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/reports"],
-    roles: ["admin"],
+    roles: ["admin", "employee"],
   },
   {
     prefixes: ["/projects", "/tasks", "/taskboard", "/task-calendar", "/time-logs", "/discussion", "/tickets", "/support-tickets", "/user-chat", "/events", "/event-calendar", "/notices", "/faqs", "/search", "/profile"],
@@ -310,7 +310,7 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/products", "/contracts", "/notes"],
-    roles: ["admin", "client"],
+    roles: ["admin", "employee", "client"],
   },
 ];
 
@@ -389,7 +389,7 @@ export const canUserAccessPath = (user: AuthUser | null, pathname: string) =>
 
 export const hasPathPermission = (user: AuthUser, pathname: string) => {
   const role = normalizeRole(user.role);
-  if (role !== "admin") return true;
+  if (role === "super_admin") return true;
 
   const matchedRule = permissionRouteRules.find((rule) =>
     rule.prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)),

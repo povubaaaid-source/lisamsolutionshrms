@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, Power, ChevronDown, User, LogIn, Menu, RefreshCw, Briefcase } from "lucide-react";
+import { Bell, Search, Power, ChevronDown, User, Menu, RefreshCw, Briefcase } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
@@ -90,9 +90,9 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   }, [searchQuery]);
 
   const hasResults = results.clients.length > 0 || results.employees.length > 0 || results.projects.length > 0;
-  const displayName = user?.name || "Admin";
-  const displayEmail = user?.email || "admin@company.com";
-  const displayRole = (user?.role || "admin").replace("_", " ");
+  const displayName = user?.name || "User";
+  const displayEmail = user?.email || "user@company.com";
+  const displayRole = (user?.role || "member").replace("_", " ");
   const showEmployeeNotifications = user?.role === "employee";
 
   return (
@@ -284,12 +284,6 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                   <User className="h-4 w-4" />
                   <span>My Profile</span>
                 </Link>
-                {user?.role === "admin" && (
-                  <Link href="/member/dashboard" className="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 hover:text-primary transition-all">
-                    <LogIn className="h-4 w-4" />
-                    <span>Login as Employee</span>
-                  </Link>
-                )}
               </div>
               <div className="p-2 border-t border-gray-50">
                 <button onClick={logout} className="flex w-full items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-black text-red-500 hover:bg-red-50 transition-all uppercase tracking-widest">
