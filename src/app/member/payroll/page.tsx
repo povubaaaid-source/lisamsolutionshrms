@@ -1,5 +1,5 @@
-import MemberPayrollPage from "@/features/member/payroll/MemberPayrollPage";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <MemberPayrollPage />;
+  redirect("/employee/payroll");
 }

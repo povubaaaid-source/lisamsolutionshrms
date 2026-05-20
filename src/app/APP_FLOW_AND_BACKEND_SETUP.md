@@ -104,7 +104,7 @@ Role rules:
 | --- | --- | --- |
 | `super_admin` | `/super-admin/dashboard` | Platform company/admin/settings layer only. |
 | `admin` | `/dashboard` | Company-scoped administration. |
-| `employee` | `/member/dashboard` | Member portal and permitted work modules. |
+| `employee` | `/employee/dashboard` | Employee portal and permitted work modules. |
 | `client` | `/dashboard/client` | Client portal and assigned records. |
 
 ## 6. Super Admin Admins Flow
@@ -320,8 +320,8 @@ SESSION_DOMAIN=localhost
 | `/leaves/settings` | `leaves/settings/page.tsx` | `GET /leaveType`, `POST /leaveType`, `PUT /leaveType/{id}`, `DELETE /leaveType/{id}`. |
 | `/leaves-settings` | `leaves-settings/page.tsx` | No direct API. Add leave settings backend. |
 | `/log-time-settings` | `log-time-settings/page.tsx` | No direct API. Add time log settings backend. |
-| `/member/dashboard` | `member/dashboard/page.tsx` | `GET /employee`, `GET /attendance`, `GET /leave`, `GET /tasks`, `POST /attendance`, `PATCH /attendance/{id}`. |
-| `/member/payroll` | `member/payroll/page.tsx` | `GET /payroll`. |
+| `/employee/dashboard` | `employee/dashboard/page.tsx` | `GET /employee`, `GET /attendance`, `GET /leave`, `GET /tasks`, `POST /attendance`, `PATCH /attendance/{id}`. |
+| `/employee/payroll` | `employee/payroll/page.tsx` | `GET /payroll`. |
 | `/message-settings` | `message-settings/page.tsx` | No direct API. Add message settings backend. |
 | `/module-settings` | `module-settings/page.tsx` | No direct API. Add module settings backend. |
 | `/notes` | `notes/page.tsx` | Uses `ResourceCrudPage` with `/notes`: GET, POST, PUT, DELETE. |

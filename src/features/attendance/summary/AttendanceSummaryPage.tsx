@@ -65,6 +65,7 @@ export default function AttendanceSummaryPage() {
     hasPermission("attendance.edit") ||
     hasPermission("attendance.approve") ||
     hasPermission("attendance.export");
+  const isSelfServiceAttendance = user?.role === "employee" && !canManageAttendance;
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -179,7 +180,7 @@ export default function AttendanceSummaryPage() {
           <div className="col-lg-3 col-md-4 col-sm-4 col-xs-12">
             <h4 className="page-title m-0">
               <Calendar className="h-5 w-5 mr-2 inline-block text-primary" />
-              Attendance Summary
+              {isSelfServiceAttendance ? "My Attendance Summary" : "Attendance Summary"}
             </h4>
           </div>
           <div className="col-sm-9 text-right flex justify-end items-center space-x-2">
@@ -208,16 +209,18 @@ export default function AttendanceSummaryPage() {
         </div>
 
         <div className="white-box">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-            <div>
-              <label className="block text-[12px] font-bold text-gray-600 mb-2">{canManageAttendance ? "Employee Name" : "My Profile"}</label>
-              <select className="form-control" value={selectedEmployee} onChange={(event) => setSelectedEmployee(event.target.value)}>
-                <option value="all">{canManageAttendance ? "All Employees" : "My Attendance"}</option>
-                {employees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>{employee.name}</option>
-                ))}
-              </select>
-            </div>
+          <div className={`grid grid-cols-1 gap-4 items-end ${canManageAttendance ? "md:grid-cols-5" : "md:grid-cols-3"}`}>
+            {canManageAttendance && (
+              <div>
+                <label className="block text-[12px] font-bold text-gray-600 mb-2">Employee Name</label>
+                <select className="form-control" value={selectedEmployee} onChange={(event) => setSelectedEmployee(event.target.value)}>
+                  <option value="all">All Employees</option>
+                  {employees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>{employee.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-[12px] font-bold text-gray-600 mb-2">Select Month</label>
               <select className="form-control" value={month} onChange={(event) => setMonth(Number(event.target.value))}>

@@ -66,7 +66,7 @@ const menuItems: MenuItem[] = [
     href: "/dashboard",
     submenu: [
       { label: "Dashboard", href: "/dashboard" },
-      { label: "Member Dashboard", href: "/member/dashboard" },
+      { label: "Employee Dashboard", href: "/employee/dashboard" },
       { label: "Project Dashboard", href: "/dashboard/project" },
       { label: "Client Dashboard", href: "/dashboard/client" },
       { label: "HR Dashboard", href: "/dashboard/hr" },
@@ -259,7 +259,8 @@ const roleMenuAccess: Record<UserRole, string[]> = {
 
 const roleSubmenuAccess: Partial<Record<UserRole, Record<string, string[]>>> = {
   employee: {
-    Dashboard: ["Member Dashboard", "Project Dashboard", "Ticket Dashboard", "HR Dashboard", "Finance Dashboard"],
+    Dashboard: ["Employee Dashboard"],
+    HR: ["Attendance", "Leaves"],
     Payroll: ["My Payslips"],
   },
   client: {
@@ -314,11 +315,18 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       .filter((item) => canOpenItem(user, userRole, item))
       .map((item) => {
         const roleDashboardHref =
-          userRole === "employee" ? "/member/dashboard" : userRole === "client" ? "/dashboard/client" : item.href;
+          userRole === "employee" ? "/employee/dashboard" : userRole === "client" ? "/dashboard/client" : item.href;
         const employeePayrollItem =
           userRole === "employee" && item.label === "Payroll"
-            ? { ...item, href: "/member/payroll", submenu: [{ label: "My Payslips", href: "/member/payroll" }] }
+            ? { ...item, href: "/employee/payroll", submenu: [{ label: "My Payslips", href: "/employee/payroll" }] }
             : item;
+        if (userRole === "employee" && item.label === "Dashboard") {
+          return {
+            ...item,
+            href: roleDashboardHref,
+            submenu: undefined,
+          };
+        }
         const normalizedItem = employeePayrollItem.label === "Dashboard" ? { ...employeePayrollItem, href: roleDashboardHref } : employeePayrollItem;
         const allowedSubmenuLabels = submenuAccess[item.label];
         const roleFilteredSubmenu = normalizedItem.submenu

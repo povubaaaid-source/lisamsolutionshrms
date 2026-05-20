@@ -15,7 +15,7 @@ const getSalaryJson = (slip: PayrollRecord) => {
   return raw && typeof raw === "object" ? (raw as { earnings?: PayrollRecord[]; deductions?: PayrollRecord[] }) : {};
 };
 
-export default function MemberPayrollPage() {
+export default function EmployeePayrollPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [slips, setSlips] = useState<PayrollRecord[]>([]);

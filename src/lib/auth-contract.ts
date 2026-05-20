@@ -119,7 +119,7 @@ export type LoginResponse = {
 
 export type RoleDefinition = {
   label: string;
-  panel: "platform" | "company" | "member" | "client";
+  panel: "platform" | "company" | "employee" | "client";
   defaultRoute: string;
   description: string;
   scope: string;
@@ -142,9 +142,9 @@ export const roleDefinitions: Record<UserRole, RoleDefinition> = {
   },
   employee: {
     label: "Employee",
-    panel: "member",
-    defaultRoute: "/member/dashboard",
-    description: "Internal staff/member portal for attendance, leaves, payslips, assigned projects, tasks, tickets, notices, and profile.",
+    panel: "employee",
+    defaultRoute: "/employee/dashboard",
+    description: "Internal employee portal for attendance, leaves, payslips, assigned projects, tasks, tickets, notices, and profile.",
     scope: "Company scoped and generally self/team scoped depending on assigned permissions.",
   },
   client: {
@@ -245,10 +245,6 @@ export const roleRouteRules: RoleRouteRule[] = [
     roles: ["super_admin"],
   },
   {
-    prefixes: ["/member"],
-    roles: ["employee"],
-  },
-  {
     prefixes: ["/settings", "/account-setup", "/module-settings", "/role-permission", "/custom-fields"],
     roles: ["admin"],
   },
@@ -258,19 +254,19 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/employees", "/teams", "/designation", "/attendance/settings/shifts", "/attendance-settings", "/leaves-settings"],
-    roles: ["admin", "employee"],
+    roles: ["admin"],
+  },
+  {
+    prefixes: ["/attendance/bulk", "/attendance/live-feed", "/attendance/roster", "/attendance/settings", "/attendance/reports"],
+    roles: ["admin"],
   },
   {
     prefixes: ["/leaves/all", "/leaves/settings", "/leave-type"],
-    roles: ["admin", "employee"],
-  },
-  {
-    prefixes: ["/attendance/bulk"],
-    roles: ["admin", "employee"],
+    roles: ["admin"],
   },
   {
     prefixes: ["/holidays/create"],
-    roles: ["admin", "employee"],
+    roles: ["admin"],
   },
   {
     prefixes: ["/attendance", "/leaves", "/holidays"],
@@ -286,7 +282,11 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/dashboard/hr", "/dashboard/finance", "/dashboard/project", "/dashboard/ticket"],
-    roles: ["admin", "employee"],
+    roles: ["admin"],
+  },
+  {
+    prefixes: ["/employee/dashboard", "/employee/payroll", "/member/dashboard", "/member/payroll"],
+    roles: ["employee"],
   },
   {
     prefixes: ["/invoices", "/estimates", "/proposals", "/credit-notes", "/payments", "/expenses", "/invoice-recurring", "/expenses-recurring"],
@@ -329,7 +329,7 @@ export const permissionRouteRules: PermissionRouteRule[] = [
   { prefixes: ["/teams", "/designation", "/attendance-settings"], anyOf: ["hr.view", "hr.manage"] },
   { prefixes: ["/attendance/settings/shifts"], anyOf: ["shifts.view", "shifts.manage"] },
   { prefixes: ["/leaves/all", "/leaves/settings", "/leave-type"], anyOf: ["leaves.view", "leaves.manage", "leaves.approve"] },
-  { prefixes: ["/attendance/bulk"], anyOf: ["attendance.create", "attendance.manage"] },
+  { prefixes: ["/attendance/bulk", "/attendance/live-feed", "/attendance/roster", "/attendance/settings", "/attendance/reports"], anyOf: ["attendance.manage"] },
   { prefixes: ["/attendance"], anyOf: ["attendance.view", "attendance.manage"] },
   { prefixes: ["/leaves"], anyOf: ["leaves.view", "leaves.manage"] },
   { prefixes: ["/holidays"], anyOf: ["hr.view", "hr.manage"] },

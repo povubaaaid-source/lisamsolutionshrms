@@ -21,7 +21,7 @@ import {
   parseOfficeOpenDays,
   ShiftDefinition,
 } from "@/lib/hr-utils";
-import { Activity, AlertTriangle, CalendarDays, Clock, Cpu, Edit3, History, RefreshCw, ShieldCheck, TimerReset, Users } from "lucide-react";
+import { Activity, AlertTriangle, CalendarDays, Clock, Cpu, Edit3, RefreshCw, ShieldCheck, TimerReset, Users } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -144,6 +144,7 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
     hasPermission("attendance.edit") ||
     hasPermission("attendance.approve") ||
     hasPermission("attendance.export");
+  const isSelfServiceAttendance = user?.role === "employee" && !canManageAttendance;
 
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -270,6 +271,8 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
   }, [attendance, date, employees, holidays, leaves, officeOpenDays]);
 
   const filteredRows = useMemo(() => {
+    if (isSelfServiceAttendance) return dailyRows;
+
     const searchTerm = search.trim().toLowerCase();
     return dailyRows.filter((row) => {
       const employeeMatch = !searchTerm || JSON.stringify(row.employee).toLowerCase().includes(searchTerm);
@@ -277,7 +280,7 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
       const exceptionMatch = !exceptionsOnly || row.isException;
       return employeeMatch && statusMatch && exceptionMatch;
     });
-  }, [dailyRows, exceptionsOnly, search, statusFilter]);
+  }, [dailyRows, exceptionsOnly, isSelfServiceAttendance, search, statusFilter]);
 
   const stats = useMemo(() => {
     const present = dailyRows.filter((row) => row.status === "present").length;
@@ -313,7 +316,7 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
           <div className="col-lg-4 col-md-5 col-sm-5 col-xs-12">
             <h4 className="page-title m-0">
               <Users className="mr-2 inline-block h-5 w-5 text-primary" />
-              {isDateWise ? "Date Wise Attendance" : "Daily Attendance"}
+              {isSelfServiceAttendance ? (isDateWise ? "My Date Wise Attendance" : "My Daily Attendance") : isDateWise ? "Date Wise Attendance" : "Daily Attendance"}
             </h4>
           </div>
           <div className="col-sm-8 flex items-center justify-end space-x-2 text-right">
@@ -337,7 +340,7 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
         </div>
 
         <div className="white-box">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-6 md:items-end">
+          <div className={`grid grid-cols-1 gap-4 md:items-end ${canManageAttendance ? "md:grid-cols-6" : "md:grid-cols-3"}`}>
             {isDateWise ? (
               <div>
                 <label className="mb-2 block text-[12px] font-bold text-gray-600">Attendance Date</label>
@@ -349,35 +352,41 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
                 <p className="mt-1 text-xs font-bold text-gray-700">{date}</p>
               </div>
             )}
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-[12px] font-bold text-gray-600">Search Employee</label>
-              <input type="search" className="form-control" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, email, department" />
-            </div>
-            <div>
-              <label className="mb-2 block text-[12px] font-bold text-gray-600">Status</label>
-              <select className="form-control" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value="all">All Statuses</option>
-                <option value="present">On Time / Full Day</option>
-                <option value="late">Late</option>
-                <option value="half-day">Half Day</option>
-                <option value="absent">Absent</option>
-                <option value="holiday">Holiday</option>
-                <option value="leave">Leave</option>
-                <option value="weekly-off">Weekly Off</option>
-                <option value="missing-checkout">Missing Checkout</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2 rounded border border-gray-200 px-3 py-2">
-              <input id="exceptionsOnly" type="checkbox" checked={exceptionsOnly} onChange={(event) => setExceptionsOnly(event.target.checked)} />
-              <label htmlFor="exceptionsOnly" className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Exceptions only</label>
-            </div>
+            {canManageAttendance && (
+              <>
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-[12px] font-bold text-gray-600">Search Employee</label>
+                  <input type="search" className="form-control" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, email, department" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-[12px] font-bold text-gray-600">Status</label>
+                  <select className="form-control" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                    <option value="all">All Statuses</option>
+                    <option value="present">On Time / Full Day</option>
+                    <option value="late">Late</option>
+                    <option value="half-day">Half Day</option>
+                    <option value="absent">Absent</option>
+                    <option value="holiday">Holiday</option>
+                    <option value="leave">Leave</option>
+                    <option value="weekly-off">Weekly Off</option>
+                    <option value="missing-checkout">Missing Checkout</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2 rounded border border-gray-200 px-3 py-2">
+                  <input id="exceptionsOnly" type="checkbox" checked={exceptionsOnly} onChange={(event) => setExceptionsOnly(event.target.checked)} />
+                  <label htmlFor="exceptionsOnly" className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Exceptions only</label>
+                </div>
+              </>
+            )}
             <div className="flex gap-2">
               <Button onClick={fetchAttendance} className="btn-success btn-block h-[34px]">
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Apply
+                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> {canManageAttendance ? "Apply" : "Refresh"}
               </Button>
-              <Button onClick={resetFilters} className="btn-default btn-block h-[34px]">
-                Reset
-              </Button>
+              {canManageAttendance && (
+                <Button onClick={resetFilters} className="btn-default btn-block h-[34px]">
+                  Reset
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -386,7 +395,7 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
           <div className="flex flex-wrap divide-x divide-[#eee]">
             <div className="min-w-[150px] flex-1 p-6 text-center">
               <h4 className="m-0 text-xl font-bold">{stats.total}</h4>
-              <p className="mt-1 text-[10px] font-bold uppercase text-gray-400">All Employees</p>
+              <p className="mt-1 text-[10px] font-bold uppercase text-gray-400">{canManageAttendance ? "All Employees" : "My Record"}</p>
             </div>
             <div className="min-w-[150px] flex-1 p-6 text-center">
               <h4 className="m-0 text-xl font-bold text-success">{stats.present}</h4>
@@ -406,7 +415,7 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
             </div>
             <div className="min-w-[150px] flex-1 border-l border-[#eee] p-6 text-center">
               <h4 className="m-0 text-xl font-bold text-info">{stats.review}</h4>
-              <p className="mt-1 text-[10px] font-bold uppercase text-gray-400">Needs Review</p>
+              <p className="mt-1 text-[10px] font-bold uppercase text-gray-400">{canManageAttendance ? "Needs Review" : "Exceptions"}</p>
             </div>
           </div>
         </div>
@@ -418,7 +427,7 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
             </div>
           )}
           <div className="table-responsive">
-            <table className="min-w-[1180px] border-separate border-spacing-y-2 px-3 text-left">
+            <table className={`${canManageAttendance ? "min-w-[1180px]" : "min-w-[1040px]"} border-separate border-spacing-y-2 px-3 text-left`}>
               <thead>
                 <tr className="bg-gray-50">
                   <th className="rounded-l-lg px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Employee</th>
@@ -430,7 +439,9 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
                   <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Work Hours</th>
                   <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Source</th>
                   <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500">Context</th>
-                  <th className="rounded-r-lg px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-gray-500">Actions</th>
+                  {canManageAttendance && (
+                    <th className="rounded-r-lg px-4 py-3 text-right text-[10px] font-black uppercase tracking-widest text-gray-500">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -495,7 +506,7 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
                         </div>
                         <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">{getDeviceLabel(row.attendance)}</div>
                       </td>
-                      <td className="px-4 py-4">
+                      <td className={`${canManageAttendance ? "" : "rounded-r-lg"} px-4 py-4`}>
                         {row.contextLabel ? (
                           <div className="flex items-center gap-1 text-xs font-bold text-gray-700">
                             <CalendarDays className="h-3.5 w-3.5 text-primary" /> {row.contextLabel}
@@ -510,9 +521,9 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
                           </div>
                         )}
                       </td>
-                      <td className="rounded-r-lg px-4 py-4">
-                        <div className="flex justify-end gap-2">
-                          {canManageAttendance && (
+                      {canManageAttendance && (
+                        <td className="rounded-r-lg px-4 py-4">
+                          <div className="flex justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => setEditingRow(row)}
@@ -521,16 +532,16 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
                             >
                               <Edit3 className="h-4 w-4" />
                             </button>
-                          )}
-                        </div>
-                      </td>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
                 {!loading && filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
-                      No attendance found for selected filters
+                    <td colSpan={canManageAttendance ? 10 : 9} className="py-12 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      {canManageAttendance ? "No attendance found for selected filters" : "No attendance record found"}
                     </td>
                   </tr>
                 )}

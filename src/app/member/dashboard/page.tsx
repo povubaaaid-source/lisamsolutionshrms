@@ -1,5 +1,5 @@
-import MemberDashboardPage from "@/features/member/dashboard/MemberDashboardPage";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <MemberDashboardPage />;
+  redirect("/employee/dashboard");
 }
