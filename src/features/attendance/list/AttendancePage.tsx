@@ -512,13 +512,6 @@ export default function AttendancePage({ mode = "daily" }: AttendancePageProps) 
                       </td>
                       <td className="rounded-r-lg px-4 py-4">
                         <div className="flex justify-end gap-2">
-                          <Link
-                            href={`/attendance/${row.employee.id}/logs?date=${date}`}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm transition hover:text-primary"
-                            title="View raw machine logs"
-                          >
-                            <History className="h-4 w-4" />
-                          </Link>
                           {canManageAttendance && (
                             <button
                               type="button"

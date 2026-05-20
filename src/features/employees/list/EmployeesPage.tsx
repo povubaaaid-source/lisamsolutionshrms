@@ -218,7 +218,7 @@ export default function EmployeesPage() {
 
         {/* Filters */}
         <Card className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <div className="space-y-2 lg:col-span-2">
               <label className="block mb-1">Search</label>
               <div className="relative">
