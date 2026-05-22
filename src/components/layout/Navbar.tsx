@@ -96,7 +96,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const showEmployeeNotifications = user?.role === "employee";
 
   return (
-    <header className="sticky top-0 z-40 flex h-[60px] w-full items-center justify-between bg-white px-6 text-gray-800 border-b border-[#f2f2f3]">
+    <header className="app-navbar sticky top-0 z-40 flex h-[60px] w-full items-center justify-between px-6 border-b">
       {/* Left side: mobile toggle + search */}
       <div className="flex items-center space-x-6">
         <button

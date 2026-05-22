@@ -394,12 +394,12 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         id="mobile-sidebar"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        className={`fixed left-0 top-0 z-50 flex h-full flex-col overflow-hidden bg-secondary text-gray-300 shadow-2xl transition-all duration-300 ease-in-out md:translate-x-0 ${mobileOpen ? "w-[260px] translate-x-0" : "w-[260px] -translate-x-full md:w-[70px]"
+        className={`app-sidebar fixed left-0 top-0 z-50 flex h-full flex-col overflow-hidden shadow-2xl transition-all duration-300 ease-in-out md:translate-x-0 ${mobileOpen ? "w-[260px] translate-x-0" : "w-[260px] -translate-x-full md:w-[70px]"
           } ${isHovered ? "md:w-[260px]" : "md:shadow-lg"}`}
         aria-label="Primary navigation"
       >
         {/* Logo */}
-        <div className={`flex h-[65px] items-center border-b border-white/10 px-4 transition-all duration-300 ${isExpanded ? "justify-start" : "justify-center"}`}>
+        <div className={`app-sidebar-border flex h-[65px] items-center border-b px-4 transition-all duration-300 ${isExpanded ? "justify-start" : "justify-center"}`}>
           <Link href="/dashboard" onClick={() => { setOpenMenus([]); onMobileClose?.(); }} className="flex-shrink-0">
             {isExpanded ? (
               <Image
@@ -446,10 +446,10 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                     aria-current={isItemActive ? "page" : undefined}
                     className={`flex items-center rounded-xl px-3 py-3 text-[15px] transition-all group ${isItemActive
                       ? "bg-primary text-white shadow-lg shadow-primary/20"
-                      : "text-gray-400 hover:bg-white/5 hover:text-white"
+                      : "app-sidebar-muted app-sidebar-hover"
                       } ${!isExpanded ? "justify-center px-0 w-10 mx-auto" : "justify-start"}`}
                   >
-                    <item.icon className={`h-5 w-5 flex-shrink-0 ${isItemActive ? "text-white" : "text-gray-400 group-hover:text-white"}`} />
+                    <item.icon className={`h-5 w-5 flex-shrink-0 ${isItemActive ? "text-white" : "app-sidebar-muted"}`} />
                     {isExpanded && (
                       <span className="ml-3 truncate animate-in slide-in-from-left-2 duration-300">
                         {item.label}
@@ -470,7 +470,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                     <div
                       className={`flex items-center rounded-xl px-3 py-3 text-[15px] transition-all cursor-pointer group ${isItemActive || isOpen
                         ? "bg-primary text-white shadow-lg shadow-primary/20"
-                        : "text-gray-400 hover:bg-white/5 hover:text-white"
+                        : "app-sidebar-muted app-sidebar-hover"
                         } ${!isExpanded ? "justify-center px-0 w-10 mx-auto" : "justify-between"}`}
                       onClick={() => toggleMenu(item)}
                       title={!isExpanded ? item.label : ""}
@@ -485,7 +485,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                       aria-expanded={item.submenu ? isOpen : undefined}
                     >
                       <div className="flex items-center space-x-3 min-w-0">
-                        <item.icon className={`h-5 w-5 flex-shrink-0 ${isItemActive || isOpen ? "text-white" : "text-gray-400 group-hover:text-white"}`} />
+                        <item.icon className={`h-5 w-5 flex-shrink-0 ${isItemActive || isOpen ? "text-white" : "app-sidebar-muted"}`} />
                         {isExpanded && (
                           <span className="truncate animate-in slide-in-from-left-2 duration-300">
                             {item.label}
@@ -505,7 +505,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
 
                     {/* Submenu */}
                     {item.submenu && isOpen && isExpanded && (
-                      <ul className="mt-1 space-y-1 ml-4 border-l border-white/10 pl-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <ul className="app-sidebar-border mt-1 space-y-1 ml-4 border-l pl-4 animate-in fade-in slide-in-from-top-2 duration-300">
                         {item.submenu.map((sub) => {
                           const isSubActive = isActive(sub.href);
                           return (
@@ -515,7 +515,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                                 onClick={onMobileClose}
                                 className={`block rounded-lg py-2 px-3 text-[13px] font-medium transition-all ${isSubActive
                                   ? "text-primary bg-primary/5 font-black"
-                                  : "text-gray-500 hover:text-white hover:bg-white/5"
+                                  : "app-sidebar-muted app-sidebar-hover"
                                   }`}
                               >
                                 {sub.label}
@@ -534,23 +534,23 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
 
 
         {/* Footer - User */}
-        <div className={`border-t border-white/10 bg-secondary/80 p-3 transition-all duration-300 ${!isExpanded ? "flex flex-col items-center space-y-4" : ""}`}>
+        <div className={`app-sidebar-footer app-sidebar-border border-t p-3 transition-all duration-300 ${!isExpanded ? "flex flex-col items-center space-y-4" : ""}`}>
           <div className={`flex items-center ${isExpanded ? "justify-between" : "flex-col space-y-4"}`}>
             {/* User avatar + dropdown */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gray-700/50 hover:ring-2 hover:ring-primary transition-all"
+                className="app-sidebar-user-button flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl hover:ring-2 hover:ring-primary transition-all"
                 aria-label="Open user menu"
               >
-                <User className="h-5 w-5 text-gray-300" />
+                <User className="app-sidebar-user-icon h-5 w-5" />
               </button>
               {showUserMenu && isExpanded && (
-                <div className="absolute bottom-12 left-0 z-50 w-52 rounded-2xl bg-secondary shadow-2xl border border-white/10 p-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                  <div className="px-3 py-3 border-b border-white/5 mb-1">
+                <div className="app-sidebar app-sidebar-border absolute bottom-12 left-0 z-50 w-52 rounded-2xl shadow-2xl border p-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  <div className="app-sidebar-border px-3 py-3 border-b mb-1">
                     <p className="text-xs font-black text-primary truncate">{userName}</p>
-                    <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-1">{userRole}</p>
+                    <p className="app-sidebar-muted mt-1 text-[10px] uppercase tracking-widest">{userRole}</p>
                     {user?.impersonator_role && (
                       <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-yellow-500">Impersonating Company</p>
                     )}
