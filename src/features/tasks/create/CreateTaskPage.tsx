@@ -12,6 +12,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 
 type OptionRecord = {
   id: number | string;
@@ -46,11 +47,14 @@ type TaskFormValues = z.infer<typeof taskSchema>;
 export default function CreateTaskPage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { user, hasPermission } = useAuth();
   const [projects, setProjects] = useState<OptionRecord[]>([]);
   const [employees, setEmployees] = useState<OptionRecord[]>([]);
   const [categories, setCategories] = useState<OptionRecord[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const canCreateTask = Boolean(isAdmin && (hasPermission("tasks.create") || hasPermission("tasks.manage")));
 
   const {
     register,
@@ -73,6 +77,17 @@ export default function CreateTaskPage() {
   });
 
   useEffect(() => {
+    if (!user || canCreateTask) return;
+    showToast("Employees can view assigned tasks but cannot create tasks.", "info");
+    router.replace("/tasks");
+  }, [canCreateTask, router, showToast, user]);
+
+  useEffect(() => {
+    if (!canCreateTask) {
+      setLoadingOptions(false);
+      return;
+    }
+
     const fetchOptions = async () => {
       try {
         const [projRes, empRes, catRes] = await Promise.all([
@@ -91,8 +106,7 @@ export default function CreateTaskPage() {
       }
     };
     fetchOptions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canCreateTask, showToast]);
 
   const onSubmit = async (data: TaskFormValues) => {
     setSaving(true);
@@ -127,6 +141,16 @@ export default function CreateTaskPage() {
       setSaving(false);
     }
   };
+
+  if (user && !canCreateTask) {
+    return (
+      <DashboardLayout>
+        <div className="flex min-h-[320px] items-center justify-center text-xs font-black uppercase tracking-widest text-gray-400">
+          Redirecting to assigned tasks...
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

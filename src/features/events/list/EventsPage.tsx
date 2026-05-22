@@ -20,15 +20,23 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
+import api from "@/lib/api";
+import { filterEmployeeScopedRecords } from "@/lib/employee-scope";
 
 type EventItem = {
-  id: number;
+  id: number | string;
   title: string;
   date: string;
   time: string;
   employee: string;
+  employee_id?: number | string;
+  user_id?: number | string;
+  audience?: string;
+  users?: Array<{ id?: number | string; name?: string; email?: string }>;
+  attendees?: Array<{ id?: number | string; name?: string; email?: string }>;
   client: string;
   category: string;
   location: string;
@@ -62,10 +70,34 @@ const colorClasses: Record<string, string> = {
   green: "bg-green-500/10 border-green-500 text-green-600",
 };
 
+const extractRecords = <T,>(payload: unknown): T[] => {
+  const root = payload as { data?: unknown } | null;
+  const data = root && typeof root === "object" && "data" in root ? root.data : payload;
+  return Array.isArray(data) ? (data as T[]) : [];
+};
+
+const normalizeEvent = (event: Record<string, unknown>): EventItem => ({
+  id: (event.id as number | string) || Date.now(),
+  title: String(event.title || event.event_name || event.name || "Untitled event"),
+  date: String(event.date || event.event_date || event.start_date || new Date().toISOString().slice(0, 10)),
+  time: String(event.time || event.start_time || "All Day"),
+  employee: typeof event.employee === "string" ? event.employee : String((event.employee as { name?: string } | undefined)?.name || event.audience || "All Employees"),
+  employee_id: event.employee_id as number | string | undefined,
+  user_id: event.user_id as number | string | undefined,
+  audience: event.audience as string | undefined,
+  users: event.users as EventItem["users"],
+  attendees: event.attendees as EventItem["attendees"],
+  client: String(event.client || "Internal"),
+  category: String(event.category || "Meeting"),
+  location: String(event.location || "Company-wide"),
+  color: String(event.color || (event.category === "Holiday" ? "green" : event.category === "Client" ? "purple" : event.category === "Milestone" ? "primary" : "blue")),
+});
+
 export default function EventsPage() {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [events, setEvents] = useState(initialEvents);
-  const [currentDate, setCurrentDate] = useState(new Date("2026-05-01"));
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"Month" | "Week" | "Day" | "List">("Month");
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
@@ -73,13 +105,34 @@ export default function EventsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [viewingEvent, setViewingEvent] = useState<EventItem | null>(null);
   const [eventForm, setEventForm] = useState(blankEvent);
+  const canManageEvents = user?.role === "admin" || user?.role === "super_admin";
+
+  const fetchEvents = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const params = new URLSearchParams();
+      if (user.role === "employee" && user.id) params.set("user_id", String(user.id));
+      const response = await api.get(`/event${params.toString() ? `?${params.toString()}` : ""}`);
+      const records = extractRecords<Record<string, unknown>>(response.data).map(normalizeEvent);
+      setEvents(records.length > 0 ? records : initialEvents);
+    } catch (error) {
+      console.error("Fetch Events Error:", error);
+      setEvents(initialEvents);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void fetchEvents();
+  }, [fetchEvents]);
 
   const currentMonth = currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  const employees = Array.from(new Set(events.map((event) => event.employee)));
-  const clients = Array.from(new Set(events.map((event) => event.client)));
-  const categories = Array.from(new Set(events.map((event) => event.category)));
+  const visibleEvents = useMemo(() => filterEmployeeScopedRecords(events, user, { includePublic: true }), [events, user]);
+  const employees = Array.from(new Set(visibleEvents.map((event) => event.employee)));
+  const clients = Array.from(new Set(visibleEvents.map((event) => event.client)));
+  const categories = Array.from(new Set(visibleEvents.map((event) => event.category)));
 
-  const filteredEvents = events.filter((event) => {
+  const filteredEvents = visibleEvents.filter((event) => {
     const matchesEmployee = employeeFilter === "all" || event.employee === employeeFilter;
     const matchesClient = clientFilter === "all" || event.client === clientFilter;
     const matchesCategory = categoryFilter === "all" || event.category === categoryFilter;
@@ -107,6 +160,10 @@ export default function EventsPage() {
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (!canManageEvents) {
+      showToast("Employees can view assigned and company events but cannot create events.", "info");
+      return;
+    }
     setEvents((prev) => [
       ...prev,
       {
@@ -119,7 +176,11 @@ export default function EventsPage() {
     showToast("Event created locally. PHP endpoint should persist the event payload.", "success");
   };
 
-  const deleteEvent = (id: number) => {
+  const deleteEvent = (id: number | string) => {
+    if (!canManageEvents) {
+      showToast("Employees can view events but cannot delete them.", "info");
+      return;
+    }
     setEvents((prev) => prev.filter((event) => event.id !== id));
     setViewingEvent(null);
     showToast("Event deleted locally. PHP endpoint should persist deletion.", "success");
@@ -140,14 +201,17 @@ export default function EventsPage() {
             <button onClick={() => showToast(`${monthEvents.length} events loaded for ${currentMonth}.`, "success")} className="p-2.5 bg-gray-50 text-gray-400 hover:text-primary rounded-xl transition-all">
               <RefreshCw className="h-4 w-4" />
             </button>
-            <Button onClick={() => setIsEditorOpen(true)} className="bg-primary text-white text-[10px] font-black px-6 h-10 uppercase tracking-widest shadow-lg shadow-primary/20">
-              <Plus className="h-4 w-4 mr-2" /> Add Event
-            </Button>
+            {canManageEvents && (
+              <Button onClick={() => setIsEditorOpen(true)} className="bg-primary text-white text-[10px] font-black px-6 h-10 uppercase tracking-widest shadow-lg shadow-primary/20">
+                <Plus className="h-4 w-4 mr-2" /> Add Event
+              </Button>
+            )}
           </div>
         </div>
 
         <Card className="border-none shadow-sm p-6 bg-white mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {canManageEvents && (
             <div>
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Employees</label>
               <div className="relative">
@@ -158,6 +222,7 @@ export default function EventsPage() {
                 </select>
               </div>
             </div>
+            )}
             <div>
               <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Client</label>
               <div className="relative">
@@ -300,9 +365,11 @@ export default function EventsPage() {
               <div className="rounded border border-gray-100 bg-gray-50 p-3"><div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Client</div><div className="mt-1 font-bold text-gray-700">{viewingEvent.client}</div></div>
               <div className="rounded border border-gray-100 bg-gray-50 p-3"><div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Location</div><div className="mt-1 font-bold text-gray-700"><MapPin className="mr-1 inline h-3 w-3" />{viewingEvent.location}</div></div>
             </div>
-            <Button onClick={() => deleteEvent(viewingEvent.id)} className="w-full bg-red-500 text-white h-11 text-[10px] font-black uppercase tracking-widest">
-              <Trash2 className="h-4 w-4 mr-2" /> Delete Event
-            </Button>
+            {canManageEvents && (
+              <Button onClick={() => deleteEvent(viewingEvent.id)} className="w-full bg-red-500 text-white h-11 text-[10px] font-black uppercase tracking-widest">
+                <Trash2 className="h-4 w-4 mr-2" /> Delete Event
+              </Button>
+            )}
           </div>
         )}
       </Modal>

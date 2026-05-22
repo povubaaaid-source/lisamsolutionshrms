@@ -30,6 +30,8 @@ import Modal from "@/components/ui/Modal";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { Project } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { filterTasksForUser, type TaskAssignmentRecord } from "@/lib/task-visibility";
 
 const PROJECT_API_TIMEOUT_MS = 1500;
 
@@ -120,6 +122,13 @@ function buildPath(template: string, projectId: string, recordId?: string | numb
   return template
     .replaceAll("{projectId}", projectId)
     .replaceAll("{id}", recordId === undefined ? "" : String(recordId));
+}
+
+function addQueryParam(path: string, key: string, value: string): string {
+  const [base, query = ""] = path.split("?");
+  const params = new URLSearchParams(query);
+  params.set(key, value);
+  return `${base}?${params.toString()}`;
 }
 
 function readByPath(record: ProjectWorkspaceRecord, path: string): unknown {
@@ -253,6 +262,7 @@ export default function ProjectWorkspacePage({
   const params = useParams();
   const router = useRouter();
   const { showToast } = useToast();
+  const { user, hasPermission } = useAuth();
   const projectId = String(params.id ?? "");
   const [project, setProject] = useState<Project | null>(null);
   const [records, setRecords] = useState<ProjectWorkspaceRecord[]>(initialRecords);
@@ -263,9 +273,23 @@ export default function ProjectWorkspacePage({
   const [deletingRecord, setDeletingRecord] = useState<ProjectWorkspaceRecord | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
+  const isTaskSection = section.toLowerCase() === "tasks";
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const canCreateRecord = Boolean(allowCreate && (!isTaskSection || (isAdmin && (hasPermission("tasks.create") || hasPermission("tasks.manage")))));
+  const canEditRecord = Boolean(allowEdit && (!isTaskSection || (isAdmin && (hasPermission("tasks.edit") || hasPermission("tasks.manage")))));
+  const canDeleteRecord = Boolean(allowDelete && (!isTaskSection || (isAdmin && (hasPermission("tasks.delete") || hasPermission("tasks.manage")))));
+  const canRunStatusActions = Boolean(!isTaskSection || (isAdmin && (hasPermission("tasks.edit") || hasPermission("tasks.manage"))));
+
   const resolvedEndpoints = useMemo(
-    () => endpointCandidates.map((endpoint) => buildPath(endpoint, projectId)),
-    [endpointCandidates, projectId]
+    () =>
+      endpointCandidates.map((endpoint) => {
+        const resolvedEndpoint = buildPath(endpoint, projectId);
+        if (isTaskSection && user?.role === "employee" && user.id) {
+          return addQueryParam(resolvedEndpoint, "user_id", String(user.id));
+        }
+        return resolvedEndpoint;
+      }),
+    [endpointCandidates, isTaskSection, projectId, user]
   );
 
   const primaryEndpoint = resolvedEndpoints[0] ?? "";
@@ -322,19 +346,30 @@ export default function ProjectWorkspacePage({
   }, [loadWorkspace]);
 
   const filteredRecords = useMemo(() => {
+    const visibleRecords = isTaskSection
+      ? (filterTasksForUser(records as unknown as TaskAssignmentRecord[], user) as unknown as ProjectWorkspaceRecord[])
+      : records;
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return records;
-    return records.filter((record) =>
+    if (!query) return visibleRecords;
+    return visibleRecords.filter((record) =>
       columns.some((column) => valueToText(readByPath(record, column.key)).toLowerCase().includes(query))
     );
-  }, [columns, records, searchTerm]);
+  }, [columns, isTaskSection, records, searchTerm, user]);
 
   const openCreate = () => {
+    if (!canCreateRecord) {
+      showToast("You can view assigned tasks but cannot create tasks.", "info");
+      return;
+    }
     setEditingRecord(null);
     setIsFormOpen(true);
   };
 
   const openEdit = (record: ProjectWorkspaceRecord) => {
+    if (!canEditRecord) {
+      showToast("You can view assigned tasks but cannot edit task setup.", "info");
+      return;
+    }
     setEditingRecord(record);
     setIsFormOpen(true);
   };
@@ -384,6 +419,12 @@ export default function ProjectWorkspacePage({
   };
 
   const deleteRecord = async () => {
+    if (!canDeleteRecord) {
+      showToast("You can view assigned tasks but cannot delete them.", "info");
+      setDeletingRecord(null);
+      return;
+    }
+
     if (!deletingRecord) return;
     const recordId = getRecordId(deletingRecord);
     if (recordId === undefined) return;
@@ -401,6 +442,11 @@ export default function ProjectWorkspacePage({
   };
 
   const applyStatusAction = async (record: ProjectWorkspaceRecord, action: ProjectWorkspaceStatusAction) => {
+    if (!canRunStatusActions) {
+      showToast("You can view assigned tasks but cannot update their status.", "info");
+      return;
+    }
+
     const recordId = getRecordId(record);
     if (recordId === undefined) return;
 
@@ -484,7 +530,7 @@ export default function ProjectWorkspacePage({
                         <button onClick={() => setViewingRecord(record)} className="p-1.5 text-gray-400 transition-colors hover:text-primary" title="View">
                           <Eye className="h-4 w-4" />
                         </button>
-                        {statusActions.map((action) => (
+                        {canRunStatusActions && statusActions.map((action) => (
                           <button
                             key={action.value}
                             onClick={() => applyStatusAction(record, action)}
@@ -493,12 +539,12 @@ export default function ProjectWorkspacePage({
                             {action.label}
                           </button>
                         ))}
-                        {allowEdit && fields.length > 0 && (
+                        {canEditRecord && fields.length > 0 && (
                           <button onClick={() => openEdit(record)} className="p-1.5 text-gray-400 transition-colors hover:text-blue-500" title="Edit">
                             <Edit className="h-4 w-4" />
                           </button>
                         )}
-                        {allowDelete && (
+                        {canDeleteRecord && (
                           <button onClick={() => setDeletingRecord(record)} className="p-1.5 text-gray-400 transition-colors hover:text-red-500" title="Delete">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -619,7 +665,7 @@ export default function ProjectWorkspacePage({
               </p>
             </div>
           </div>
-          {allowCreate && fields.length > 0 && (
+          {canCreateRecord && fields.length > 0 && (
             <Button onClick={openCreate} className="h-10 bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20">
               <Plus className="mr-2 h-4 w-4" />
               {createButtonLabel ?? `Add ${section}`}
@@ -774,7 +820,7 @@ export default function ProjectWorkspacePage({
               <Button onClick={() => setViewingRecord(null)} className="h-11 bg-gray-100 px-6 text-[10px] font-black uppercase tracking-widest text-gray-500">
                 Close
               </Button>
-              {allowEdit && fields.length > 0 && (
+              {canEditRecord && fields.length > 0 && (
                 <Button
                   onClick={() => {
                     openEdit(viewingRecord);

@@ -8,6 +8,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronRight,
+  Clock,
   Coffee,
   FileText,
   MapPin,
@@ -20,6 +21,8 @@ import Card from "@/components/ui/Card";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { isTaskAssignedToUser } from "@/lib/task-visibility";
+import { filterEmployeeScopedRecords, isEmployeeScopedRecordForUser } from "@/lib/employee-scope";
 
 type ShiftSummary = {
   id?: number | string;
@@ -72,6 +75,44 @@ type TaskRecord = {
   status?: string;
   project?: { project_name?: string; name?: string };
   users?: Array<{ id?: number | string; name?: string }>;
+};
+
+type TimeLogRecord = {
+  id: number | string;
+  user_id?: number | string;
+  employee_id?: number | string;
+  employee?: { id?: number | string; name?: string };
+  user?: { id?: number | string; name?: string };
+  project?: { project_name?: string; name?: string };
+  project_name?: string;
+  task?: { heading?: string; title?: string };
+  task_name?: string;
+  start_time?: string;
+  end_time?: string;
+  total_minutes?: number | string;
+  total_hours?: number | string;
+  memo?: string;
+};
+
+type EventRecord = {
+  id: number | string;
+  title?: string;
+  event_name?: string;
+  name?: string;
+  date?: string;
+  event_date?: string;
+  start_date?: string;
+  time?: string;
+  start_time?: string;
+  employee_id?: number | string;
+  user_id?: number | string;
+  employee?: { id?: number | string; name?: string } | string;
+  user?: { id?: number | string; name?: string };
+  users?: Array<{ id?: number | string; name?: string; email?: string }>;
+  attendees?: Array<{ id?: number | string; name?: string; email?: string }>;
+  audience?: string;
+  category?: string;
+  location?: string;
 };
 
 function extractRecords<T>(payload: unknown): T[] {
@@ -151,11 +192,27 @@ function getShiftLabel(shift?: ShiftSummary) {
   return `${shift.shift_name || "Assigned Shift"} - ${shift.start_time || "--:--"} to ${shift.end_time || "--:--"}`;
 }
 
-const fallbackTasks: TaskRecord[] = [
-  { id: 1, title: "Review UI feedback for HR module", project: { project_name: "Worksuite SaaS" }, priority: "High", status: "In Progress" },
-  { id: 2, title: "Fix API connection in login page", project: { project_name: "Worksuite SaaS" }, priority: "Medium", status: "Pending" },
-  { id: 3, title: "Prepare weekly status report", project: { project_name: "Internal" }, priority: "Low", status: "Pending" },
-];
+function formatDuration(minutes?: number | string, hours?: number | string) {
+  const totalMinutes = Number(minutes || 0) || Math.round((Number(hours || 0) || 0) * 60);
+  if (!totalMinutes) return "0h";
+  const wholeHours = Math.floor(totalMinutes / 60);
+  const remainingMinutes = totalMinutes % 60;
+  return remainingMinutes ? `${wholeHours}h ${remainingMinutes}m` : `${wholeHours}h`;
+}
+
+function getTimeLogMinutes(log: TimeLogRecord) {
+  return Number(log.total_minutes || 0) || Math.round((Number(log.total_hours || 0) || 0) * 60);
+}
+
+function formatDate(value?: string) {
+  if (!value) return "No date";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function getEventDate(event: EventRecord) {
+  return event.date || event.event_date || event.start_date || "";
+}
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
@@ -165,6 +222,8 @@ export default function EmployeeDashboard() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [timeLogs, setTimeLogs] = useState<TimeLogRecord[]>([]);
+  const [events, setEvents] = useState<EventRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isClockedIn, setIsClockedIn] = useState(false);
   const [isOnBreak, setIsOnBreak] = useState(false);
@@ -183,16 +242,21 @@ export default function EmployeeDashboard() {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        const [employeeResponse, attendanceResponse, leaveResponse, taskResponse] = await Promise.all([
+        const userScope = user?.id ? `user_id=${encodeURIComponent(String(user.id))}` : "";
+        const [employeeResponse, attendanceResponse, leaveResponse, taskResponse, timeLogResponse, eventResponse] = await Promise.all([
           api.get("/employee"),
           api.get("/attendance"),
           api.get("/leave"),
-          api.get("/tasks"),
+          api.get(user?.id ? `/task?include=project,users&user_id=${encodeURIComponent(String(user.id))}` : "/task?include=project,users"),
+          api.get(userScope ? `/time-log?include=project,task&${userScope}` : "/time-log?include=project,task"),
+          api.get(userScope ? `/event?${userScope}` : "/event"),
         ]);
         setEmployees(extractRecords<EmployeeRecord>(employeeResponse.data));
         setAttendance(extractRecords<AttendanceRecord>(attendanceResponse.data));
         setLeaves(extractRecords<LeaveRecord>(leaveResponse.data));
         setTasks(extractRecords<TaskRecord>(taskResponse.data));
+        setTimeLogs(extractRecords<TimeLogRecord>(timeLogResponse.data));
+        setEvents(extractRecords<EventRecord>(eventResponse.data));
       } catch {
         showToast("Failed to load employee dashboard data.", "error");
       } finally {
@@ -205,7 +269,7 @@ export default function EmployeeDashboard() {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [showToast]);
+  }, [showToast, user?.id]);
 
   const currentEmployee = useMemo(() => {
     const userId = String(user?.id || "");
@@ -235,9 +299,27 @@ export default function EmployeeDashboard() {
   );
 
   const assignedTasks = useMemo(() => {
-    const scopedTasks = tasks.filter((task) => task.users?.some((item) => String(item.id) === employeeId));
-    return (scopedTasks.length > 0 ? scopedTasks : fallbackTasks).slice(0, 4);
-  }, [employeeId, tasks]);
+    return tasks
+      .filter((task) => task.users?.some((item) => String(item.id) === employeeId) || isTaskAssignedToUser(task, user))
+      .slice(0, 4);
+  }, [employeeId, tasks, user]);
+
+  const myTimeLogs = useMemo(() => {
+    return filterEmployeeScopedRecords(timeLogs, user)
+      .filter((log) => !employeeId || String(log.employee_id || log.user_id || log.employee?.id || log.user?.id) === employeeId || isEmployeeScopedRecordForUser(log, user))
+      .sort((a, b) => String(b.start_time || "").localeCompare(String(a.start_time || "")));
+  }, [employeeId, timeLogs, user]);
+
+  const upcomingEvents = useMemo(() => {
+    const today = localDateString();
+    return filterEmployeeScopedRecords(events, user, { includePublic: true })
+      .filter((event) => {
+        const eventDate = getEventDate(event);
+        return !eventDate || eventDate >= today;
+      })
+      .sort((a, b) => getEventDate(a).localeCompare(getEventDate(b)))
+      .slice(0, 4);
+  }, [events, user]);
 
   useEffect(() => {
     if (!currentEmployee) return;
@@ -266,11 +348,14 @@ export default function EmployeeDashboard() {
 
   const pendingLeaves = myLeaves.filter((leave) => statusText(leave.status) === "pending").length;
   const activeLeaves = myLeaves.filter((leave) => !["rejected", "cancelled"].includes(statusText(leave.status))).length;
+  const loggedMinutes = myTimeLogs.reduce((total, log) => total + getTimeLogMinutes(log), 0);
 
   const summaryStats = [
     { label: "My Leaves", value: String(activeLeaves), icon: Calendar, color: "text-blue-600", bg: "bg-blue-50" },
     { label: "Attendance", value: `${attendanceRate}%`, icon: UserCheck, color: "text-purple-600", bg: "bg-purple-50" },
     { label: "My Shift", value: assignedShift?.code || "None", icon: Timer, color: "text-green-600", bg: "bg-green-50" },
+    { label: "Time Logged", value: formatDuration(loggedMinutes), icon: Clock, color: "text-cyan-600", bg: "bg-cyan-50" },
+    { label: "Events", value: String(upcomingEvents.length), icon: Calendar, color: "text-pink-600", bg: "bg-pink-50" },
     { label: "Pending Requests", value: String(pendingLeaves), icon: AlertCircle, color: "text-orange-600", bg: "bg-orange-50" },
   ];
 
@@ -389,7 +474,7 @@ export default function EmployeeDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-6 lg:grid-cols-6">
           {summaryStats.map((stat) => (
             <Card key={stat.label} className="flex items-center space-x-4 border-none bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
               <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${stat.bg} ${stat.color}`}>
@@ -414,7 +499,7 @@ export default function EmployeeDashboard() {
                 <Link href="/tasks" className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline">View All</Link>
               </div>
               <div className="divide-y divide-gray-50">
-                {assignedTasks.map((task) => {
+                {assignedTasks.length > 0 ? assignedTasks.map((task) => {
                   const priority = task.priority || "Low";
                   const status = task.status || "Pending";
                   return (
@@ -439,7 +524,42 @@ export default function EmployeeDashboard() {
                       </div>
                     </Link>
                   );
-                })}
+                }) : (
+                  <div className="px-6 py-10 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    No assigned tasks yet
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card className="overflow-hidden border-none bg-white p-0 shadow-sm">
+              <div className="flex items-center justify-between border-b border-gray-50 px-6 py-5">
+                <h3 className="flex items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-800">
+                  <Clock className="mr-2 h-4 w-4 text-primary" />
+                  My Time Logs
+                </h3>
+                <Link href="/time-logs" className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline">View All</Link>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {myTimeLogs.slice(0, 4).length > 0 ? myTimeLogs.slice(0, 4).map((log) => (
+                  <Link key={log.id} href="/time-logs" className="block p-5 transition-colors hover:bg-gray-50/50">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-gray-800">{log.task?.heading || log.task?.title || log.memo || "Time log"}</p>
+                        <p className="mt-1 truncate text-[10px] font-black uppercase tracking-widest text-gray-400">
+                          {log.project?.project_name || log.project?.name || log.project_name || "Internal"} / {formatDate(log.start_time)}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-cyan-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-600">
+                        {formatDuration(log.total_minutes, log.total_hours)}
+                      </span>
+                    </div>
+                  </Link>
+                )) : (
+                  <div className="px-6 py-10 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    No time logged yet
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -520,6 +640,37 @@ export default function EmployeeDashboard() {
                   <Coffee className="mr-2 h-3 w-3" />
                   {isOnBreak ? "End Break" : "Take a Break"}
                 </button>
+              </div>
+            </Card>
+
+            <Card className="overflow-hidden border-none bg-white p-0 shadow-sm">
+              <div className="flex items-center justify-between border-b border-gray-50 px-6 py-5">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-800">Upcoming Events</h3>
+                <Link href="/event-calendar" className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline">Calendar</Link>
+              </div>
+              <div className="space-y-4 p-6">
+                {upcomingEvents.length > 0 ? upcomingEvents.map((event) => {
+                  const eventDate = getEventDate(event);
+                  return (
+                    <Link key={event.id} href="/event-calendar" className="group flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-white hover:shadow-md">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex h-10 w-10 flex-col items-center justify-center rounded-xl border border-gray-100 bg-white transition-all group-hover:border-primary/30 group-hover:bg-primary/5">
+                          <span className="text-[8px] font-black uppercase leading-none text-primary">{formatDate(eventDate).split(" ")[0]}</span>
+                          <span className="text-sm font-black text-gray-800">{formatDate(eventDate).split(" ")[1] || "--"}</span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-800">{event.title || event.event_name || event.name || "Untitled event"}</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">{event.time || event.start_time || event.location || "Scheduled"}</p>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-pink-50 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-pink-600">{event.category || "Event"}</span>
+                    </Link>
+                  );
+                }) : (
+                  <div className="px-2 py-8 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    No upcoming events
+                  </div>
+                )}
               </div>
             </Card>
 

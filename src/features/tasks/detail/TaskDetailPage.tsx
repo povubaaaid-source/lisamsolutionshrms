@@ -34,6 +34,8 @@ import api from "@/lib/api";
 import { Task } from "@/types";
 import { useToast } from "@/context/ToastContext";
 import { formatDuration } from "@/lib/hr-utils";
+import { useAuth } from "@/context/AuthContext";
+import { isTaskAssignedToUser } from "@/lib/task-visibility";
 
 type LooseRecord = {
   id?: number | string;
@@ -199,6 +201,7 @@ export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("details");
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
@@ -206,12 +209,26 @@ export default function TaskDetailPage() {
   const [subtasks, setSubtasks] = useState<LooseRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const canManageTask = user?.role === "admin" || user?.role === "super_admin";
 
   useEffect(() => {
     const fetchTask = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await api.get(`/task/${params.id}`);
         const fetchedTask = response.data.data as Task;
+
+        if (user.role === "employee" && !isTaskAssignedToUser(fetchedTask, user)) {
+          setTask(null);
+          setError("This task is not assigned to you.");
+          showToast("You can only open tasks assigned to you.", "info");
+          return;
+        }
+
         setTask(fetchedTask);
         setSubtasks(getCollection((fetchedTask as unknown as LooseRecord).subtasks, starterSubtasks));
         setError(null);
@@ -224,7 +241,7 @@ export default function TaskDetailPage() {
       }
     };
     fetchTask();
-  }, [params.id, showToast]);
+  }, [params.id, showToast, user]);
 
   const collections = useMemo(() => {
     const source = (task || {}) as LooseRecord;
@@ -319,11 +336,13 @@ export default function TaskDetailPage() {
               {isTimerRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               <span>{isTimerRunning ? "Stop Timer" : "Start Timer"}</span>
             </button>
-            <Link href={`/tasks/${task.id}/edit`}>
-              <Button className="rounded-xl border border-gray-100 bg-white p-2.5 text-gray-400 transition-colors hover:text-primary">
-                <Edit className="h-5 w-5" />
-              </Button>
-            </Link>
+            {canManageTask && (
+              <Link href={`/tasks/${task.id}/edit`}>
+                <Button className="rounded-xl border border-gray-100 bg-white p-2.5 text-gray-400 transition-colors hover:text-primary">
+                  <Edit className="h-5 w-5" />
+                </Button>
+              </Link>
+            )}
             <Button onClick={() => router.push("/tasks")} className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-gray-400 shadow-sm transition-colors hover:text-gray-600">
               <ChevronLeft className="h-5 w-5" />
             </Button>
@@ -385,10 +404,12 @@ export default function TaskDetailPage() {
                     <h3 className="text-sm font-black uppercase tracking-widest text-gray-800">Subtasks</h3>
                     <p className="mt-1 text-xs font-medium text-gray-400">{completedSubtasks}/{subtasks.length} complete / {subtaskProgress}% progress</p>
                   </div>
-                  <button className="flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20">
-                    <Plus className="h-4 w-4" />
-                    <span>Add Subtask</span>
-                  </button>
+                  {canManageTask && (
+                    <button className="flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20">
+                      <Plus className="h-4 w-4" />
+                      <span>Add Subtask</span>
+                    </button>
+                  )}
                 </div>
                 <div className="mb-5 h-2 overflow-hidden rounded-full bg-gray-100">
                   <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${subtaskProgress}%` }} />
@@ -530,22 +551,26 @@ export default function TaskDetailPage() {
                   <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Subtask Progress</span>
                   <span className="text-xs font-black text-gray-800">{subtaskProgress}%</span>
                 </div>
-                <Button className="mt-2 h-11 w-full bg-primary text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20">
-                  Update Progress
-                </Button>
+                {canManageTask && (
+                  <Button className="mt-2 h-11 w-full bg-primary text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20">
+                    Update Progress
+                  </Button>
+                )}
               </div>
             </Card>
 
-            <Card title="Task Tools" className="border-none bg-white p-6 shadow-sm">
-              <div className="grid grid-cols-1 gap-3">
-                <button className="flex h-11 items-center justify-center rounded-xl bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-700 transition-all hover:bg-primary hover:text-white">
-                  <Bell className="mr-2 h-4 w-4" /> Send Reminder
-                </button>
-                <button className="flex h-11 items-center justify-center rounded-xl bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-700 transition-all hover:bg-primary hover:text-white">
-                  <User className="mr-2 h-4 w-4" /> Manage Members
-                </button>
-              </div>
-            </Card>
+            {canManageTask && (
+              <Card title="Task Tools" className="border-none bg-white p-6 shadow-sm">
+                <div className="grid grid-cols-1 gap-3">
+                  <button className="flex h-11 items-center justify-center rounded-xl bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-700 transition-all hover:bg-primary hover:text-white">
+                    <Bell className="mr-2 h-4 w-4" /> Send Reminder
+                  </button>
+                  <button className="flex h-11 items-center justify-center rounded-xl bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-700 transition-all hover:bg-primary hover:text-white">
+                    <User className="mr-2 h-4 w-4" /> Manage Members
+                  </button>
+                </div>
+              </Card>
+            )}
           </div>
         </div>
       </div>

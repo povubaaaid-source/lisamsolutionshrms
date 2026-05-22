@@ -8,9 +8,12 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { filterTasksForUser } from "@/lib/task-visibility";
 
 export default function CreateTimeLogPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
@@ -26,12 +29,23 @@ export default function CreateTimeLogPage() {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
+        const taskUrl = user?.role === "employee" && user.id ? `/task?include=project,users&user_id=${encodeURIComponent(String(user.id))}` : "/task?include=project,users";
         const [projRes, taskRes] = await Promise.all([
           api.get("/project"),
-          api.get("/task"),
+          api.get(taskUrl),
         ]);
-        setProjects(projRes.data.data || []);
-        setTasks(taskRes.data.data || []);
+        const visibleTasks = filterTasksForUser(taskRes.data.data || [], user);
+        const visibleProjects = user?.role === "employee"
+          ? Array.from(
+              visibleTasks.reduce((projectMap: Map<string, any>, task: any) => {
+                const projectId = task.project?.id || task.project_id;
+                if (projectId && task.project) projectMap.set(String(projectId), task.project);
+                return projectMap;
+              }, new Map<string, any>()).values(),
+            )
+          : projRes.data.data || [];
+        setProjects(visibleProjects);
+        setTasks(visibleTasks);
       } catch {
         setProjects([{ id: 1, project_name: "Website Redesign" }]);
         setTasks([{ id: 1, heading: "Design Homepage" }]);
@@ -40,7 +54,7 @@ export default function CreateTimeLogPage() {
       }
     };
     fetchOptions();
-  }, []);
+  }, [user]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -53,14 +67,18 @@ export default function CreateTimeLogPage() {
     try {
       const payload: any = {
         task: { id: formData.task_id },
+        task_id: formData.task_id,
         memo: formData.memo,
+        start_time: new Date().toISOString(),
+        status: "running",
+        user_id: user?.id,
+        employee_id: user?.id,
       };
-      if (formData.project_id) payload.project = { id: formData.project_id };
-
-      if (localStorage.getItem("token") === "mock_token_12345") {
-        setTimeout(() => { router.push("/time-logs"); router.refresh(); }, 800);
-        return;
+      if (formData.project_id) {
+        payload.project = { id: formData.project_id };
+        payload.project_id = formData.project_id;
       }
+
       await api.post("/time-log", payload);
       router.push("/time-logs");
       router.refresh();

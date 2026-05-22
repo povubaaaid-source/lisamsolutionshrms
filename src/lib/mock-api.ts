@@ -601,6 +601,52 @@ const seedStore: MockStore = {
     { id: 1, date: "2026-05-01", holiday_date: "2026-05-01", occassion: "Labour Day", name: "Labour Day", created_at: now },
     { id: 2, date: "2026-05-25", holiday_date: "2026-05-25", occassion: "Company Holiday", name: "Company Holiday", created_at: now },
   ],
+  events: [
+    {
+      id: 1,
+      title: "Team Review",
+      event_name: "Team Review",
+      date: "2026-05-24",
+      event_date: "2026-05-24",
+      time: "02:00 PM",
+      start_time: "02:00 PM",
+      user_id: 2,
+      employee_id: 2,
+      employee: { id: 2, name: "Jane Smith" },
+      category: "Meeting",
+      location: "Conference Room",
+      created_at: now,
+    },
+    {
+      id: 2,
+      title: "Project Demo",
+      event_name: "Project Demo",
+      date: "2026-05-27",
+      event_date: "2026-05-27",
+      time: "11:00 AM",
+      start_time: "11:00 AM",
+      user_id: 3,
+      employee_id: 3,
+      employee: { id: 3, name: "Mike Tyson" },
+      category: "Milestone",
+      location: "Zoom",
+      created_at: now,
+    },
+    {
+      id: 3,
+      title: "Company Town Hall",
+      event_name: "Company Town Hall",
+      date: "2026-05-29",
+      event_date: "2026-05-29",
+      time: "04:00 PM",
+      start_time: "04:00 PM",
+      audience: "All Employees",
+      employee: "All Employees",
+      category: "Company",
+      location: "Main Hall",
+      created_at: now,
+    },
+  ],
   attendance: [
     {
       id: 1,
@@ -1478,7 +1524,28 @@ const filterRecords = (records: MockRecord[], searchParams: URLSearchParams) => 
     const monthMatch = !month || String(record.month) === month;
     const yearMatch = !year || String(record.year) === year;
     const cycleMatch = !cycle || String(record.payroll_cycle_id || record.cycle_id || record.cycle) === cycle;
-    const employeeMatch = !employeeId || String(record.employee_id || record.user_id || getNestedId(record.employee) || getNestedId(record.user)) === employeeId;
+    const assignedUsers = [
+      ...(Array.isArray(record.users) ? record.users : []),
+      ...(Array.isArray(record.task_users) ? record.task_users : []),
+      ...(Array.isArray(record.assignees) ? record.assignees : []),
+    ];
+    const assignedUserMatch = assignedUsers.some((item) => {
+      const assignee = getNestedObject(item);
+      return String(getNestedId(item) || assignee.user_id || assignee.employee_id || assignee.assigned_user_id) === employeeId;
+    });
+    const publicEmployeeMatch = ["all", "all employees", "everyone", "company-wide", "company"].includes(
+      String(record.audience || record.employee || record.user || "").toLowerCase(),
+    );
+    const assignedTo = getNestedObject(record.assigned_to);
+    const directEmployeeIds = [
+      record.employee_id,
+      record.user_id,
+      record.assigned_user_id,
+      Object.keys(assignedTo).length > 0 ? getNestedId(record.assigned_to) || assignedTo.user_id || assignedTo.employee_id : record.assigned_to,
+      getNestedId(record.employee),
+      getNestedId(record.user),
+    ];
+    const employeeMatch = !employeeId || directEmployeeIds.some((value) => String(value) === employeeId) || assignedUserMatch || publicEmployeeMatch;
     const employee = getNestedObject(record.employee) || getNestedObject(record.user);
     const detail = getNestedObject(employee?.employee_detail);
     const department = getNestedObject(detail?.department);

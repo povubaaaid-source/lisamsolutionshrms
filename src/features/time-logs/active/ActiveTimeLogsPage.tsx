@@ -6,7 +6,8 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Link from "next/link";
 import { ArrowLeft, Clock, Pause, Play, Timer, User } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 type ActiveTimer = {
   id: number | string;
@@ -25,7 +26,12 @@ const starterTimers: ActiveTimer[] = [
 ];
 
 export default function ActiveTimersPage() {
+  const { user } = useAuth();
   const [timers, setTimers] = useState(starterTimers);
+  const visibleTimers = useMemo(
+    () => (user?.role === "employee" ? timers.filter((timer) => timer.employee.toLowerCase() === user.name.toLowerCase()) : timers),
+    [timers, user],
+  );
 
   const stopTimer = (timerId: number | string) => {
     setTimers((current) => current.map((timer) => timer.id === timerId ? { ...timer, status: "stopped" } : timer));
@@ -49,7 +55,7 @@ export default function ActiveTimersPage() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <Card className="border-none bg-white p-6 shadow-sm">
             <Timer className="mb-3 h-5 w-5 text-primary" />
-            <p className="text-2xl font-black text-gray-800">{timers.filter((timer) => timer.status === "running").length}</p>
+            <p className="text-2xl font-black text-gray-800">{visibleTimers.filter((timer) => timer.status === "running").length}</p>
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Running</p>
           </Card>
           <Card className="border-none bg-white p-6 shadow-sm">
@@ -59,14 +65,14 @@ export default function ActiveTimersPage() {
           </Card>
           <Card className="border-none bg-white p-6 shadow-sm">
             <User className="mb-3 h-5 w-5 text-green-500" />
-            <p className="text-2xl font-black text-gray-800">{new Set(timers.map((timer) => timer.employee)).size}</p>
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Employees</p>
+            <p className="text-2xl font-black text-gray-800">{new Set(visibleTimers.map((timer) => timer.employee)).size}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{user?.role === "employee" ? "My Timers" : "Employees"}</p>
           </Card>
         </div>
 
         <AdminDataTable
           title="Running Timer List"
-          records={timers}
+          records={visibleTimers}
           getRecordKey={(record) => record.id}
           columns={[
             { header: "Employee", accessor: (record) => record.employee },

@@ -4,12 +4,17 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { Save, ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 
 export default function EditTaskPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const canManageTask = user?.role === "admin" || user?.role === "super_admin";
 
   const [task, setTask] = useState({
     title: "Design homepage mockup",
@@ -20,10 +25,26 @@ export default function EditTaskPage() {
     description: "Create a modern and clean homepage layout for the new website redesign project."
   });
 
+  useEffect(() => {
+    if (!user || canManageTask) return;
+    showToast("Employees can view assigned tasks but cannot edit task setup.", "info");
+    router.replace("/tasks");
+  }, [canManageTask, router, showToast, user]);
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     router.push('/tasks');
   };
+
+  if (user && !canManageTask) {
+    return (
+      <DashboardLayout>
+        <div className="flex min-h-[320px] items-center justify-center text-xs font-black uppercase tracking-widest text-gray-400">
+          Redirecting to assigned tasks...
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

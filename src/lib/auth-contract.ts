@@ -207,7 +207,7 @@ export const rolePermissions: Record<UserRole, PermissionKey[]> = {
     "holidays.view",
     "payroll.view",
     "projects.view",
-    "tasks.*",
+    "tasks.view",
     "tickets.*",
     "messages.*",
     "events.view",
@@ -270,6 +270,22 @@ export const roleRouteRules: RoleRouteRule[] = [
   },
   {
     prefixes: ["/holidays/create"],
+    roles: ["admin"],
+  },
+  {
+    prefixes: ["/tasks/create"],
+    roles: ["admin"],
+  },
+  {
+    prefixes: ["/time-logs/active", "/time-logs/by-employee"],
+    roles: ["admin"],
+  },
+  {
+    prefixes: ["/time-logs/create", "/time-logs/calendar"],
+    roles: ["admin", "employee"],
+  },
+  {
+    prefixes: ["/events/create", "/event-type"],
     roles: ["admin"],
   },
   {
@@ -345,12 +361,15 @@ export const permissionRouteRules: PermissionRouteRule[] = [
   { prefixes: ["/reports"], anyOf: ["reports.view", "reports.export"] },
   { prefixes: ["/contracts"], anyOf: ["contracts.view", "contracts.manage"] },
   { prefixes: ["/projects"], anyOf: ["projects.view", "projects.manage"] },
+  { prefixes: ["/tasks/create"], anyOf: ["tasks.create", "tasks.manage"] },
   { prefixes: ["/tasks", "/taskboard", "/task-calendar", "/task-category", "/task-label", "/task-request", "/sub-task"], anyOf: ["tasks.view", "tasks.manage"] },
+  { prefixes: ["/time-logs/active", "/time-logs/by-employee"], anyOf: ["tasks.manage", "projects.manage", "reports.view"] },
   { prefixes: ["/time-logs"], anyOf: ["tasks.view", "projects.view", "reports.view"] },
   { prefixes: ["/discussion", "/discussion-categories", "/discussion-reply"], anyOf: ["projects.view", "tasks.view"] },
   { prefixes: ["/tickets", "/support-tickets", "/ticket-form", "/ticket-settings"], anyOf: ["tickets.view", "tickets.manage"] },
   { prefixes: ["/user-chat"], anyOf: ["messages.view", "messages.manage"] },
-  { prefixes: ["/events", "/event-calendar", "/event-type"], anyOf: ["events.view", "events.manage"] },
+  { prefixes: ["/events/create", "/event-type"], anyOf: ["events.create", "events.manage"] },
+  { prefixes: ["/events", "/event-calendar"], anyOf: ["events.view", "events.manage"] },
   { prefixes: ["/notices"], anyOf: ["notices.view", "notices.manage"] },
   { prefixes: ["/products"], anyOf: ["products.view", "products.manage"] },
   { prefixes: ["/profile", "/search"], anyOf: ["profile.view", "dashboard.view"] },

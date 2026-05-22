@@ -3,13 +3,14 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
 import { Plus, RefreshCw, Edit, Trash2, Eye, CheckCircle2, Circle, AlertTriangle, Search } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import api from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { getStoredRole } from "@/lib/session";
+import { useAuth } from "@/context/AuthContext";
+import { filterTasksForUser, isTaskAssignedToUser } from "@/lib/task-visibility";
 import type { Task } from "@/types";
 
 const priorityColors: Record<string, string> = {
@@ -23,6 +24,7 @@ const memberColors = ["bg-blue-400", "bg-green-400", "bg-yellow-400", "bg-purple
 
 export default function TasksPage() {
   const { showToast } = useToast();
+  const { user, hasPermission } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -30,30 +32,55 @@ export default function TasksPage() {
   const [priorityFilter, setPriorityFilter] = useState("All");
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState<number | string | null>(null);
-  const [userRole] = useState(() => getStoredRole());
-  const canManageTasks = userRole === "admin" || userRole === "employee";
-  const canCreateTasks = userRole === "admin" || userRole === "employee";
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const canManageTasks = Boolean(isAdmin && (hasPermission("tasks.edit") || hasPermission("tasks.delete") || hasPermission("tasks.manage")));
+  const canCreateTasks = Boolean(isAdmin && (hasPermission("tasks.create") || hasPermission("tasks.manage")));
+  const canUpdateOwnTaskStatus = Boolean(user?.role === "employee" && hasPermission("tasks.edit"));
 
-  const fetchTasks = async () => {
+  const buildTaskUrl = useCallback(
+    (scoped: boolean) => {
+      const params = new URLSearchParams({ include: "project,users" });
+      if (scoped && user?.role === "employee" && user.id) {
+        params.set("user_id", String(user.id));
+      }
+      return `/task?${params.toString()}`;
+    },
+    [user],
+  );
+
+  const fetchTasks = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await api.get("/task?include=project,users");
-      setTasks(response.data.data);
+      const response = await api.get(buildTaskUrl(true));
+      const records = Array.isArray(response.data.data) ? (response.data.data as Task[]) : [];
+      let visibleTasks = filterTasksForUser(records, user);
+
+      if (user.role === "employee" && visibleTasks.length === 0 && records.length === 0) {
+        const fallbackResponse = await api.get(buildTaskUrl(false));
+        const fallbackRecords = Array.isArray(fallbackResponse.data.data) ? (fallbackResponse.data.data as Task[]) : [];
+        visibleTasks = filterTasksForUser(fallbackRecords, user);
+      }
+
+      setTasks(visibleTasks);
     } catch (err) {
       console.error("Fetch Tasks Error:", err);
       showToast("Failed to fetch tasks", "error");
     } finally {
       setLoading(false);
     }
-  };
+  }, [buildTaskUrl, showToast, user]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchTasks]);
 
-  const filteredTasks = tasks.filter(t => {
+  const filteredTasks = filterTasksForUser(tasks, user).filter(t => {
     const query = searchTerm.trim().toLowerCase();
     const searchText = [
       t.heading,
@@ -69,12 +96,16 @@ export default function TasksPage() {
     return searchMatch && statusMatch && priorityMatch;
   });
 
-  const handleToggleStatus = async (id: number | string, currentStatus: string) => {
-    if (!canManageTasks) {
+  const handleToggleStatus = async (task: Task) => {
+    const canUpdateTask = canManageTasks || (canUpdateOwnTaskStatus && isTaskAssignedToUser(task, user));
+
+    if (!canUpdateTask) {
       showToast("You can view tasks but cannot update their status.", "info");
       return;
     }
 
+    const id = task.id;
+    const currentStatus = task.status;
     const newStatus = currentStatus === "completed" ? "incomplete" : "completed";
     try {
       await api.patch(`/task/${id}`, { status: newStatus });
@@ -87,6 +118,12 @@ export default function TasksPage() {
   };
 
   const handleDelete = async () => {
+    if (!canManageTasks) {
+      showToast("You can view tasks but cannot delete them.", "info");
+      setDeletingTaskId(null);
+      return;
+    }
+
     if (deletingTaskId) {
       try {
         await api.delete(`/task/${deletingTaskId}`);
@@ -110,7 +147,7 @@ export default function TasksPage() {
     <DashboardLayout>
       <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between bg-white px-6 py-4 shadow-sm -mx-6 -mt-6 mb-5 gap-3">
-          <h1 className="text-base font-semibold text-gray-700 uppercase tracking-widest font-black">All Tasks</h1>
+          <h1 className="text-base font-semibold text-gray-700 uppercase tracking-widest font-black">{user?.role === "employee" ? "My Tasks" : "All Tasks"}</h1>
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={fetchTasks}
@@ -210,7 +247,7 @@ export default function TasksPage() {
                 {filteredTasks.length > 0 ? filteredTasks.map((task) => (
                   <tr key={task.id} className={`hover:bg-gray-50/50 transition-colors group ${task.status === "completed" ? "bg-gray-50/30" : ""}`}>
                     <td className="px-6 py-4 text-center">
-                      <button onClick={() => handleToggleStatus(task.id, task.status)} className="transition-transform active:scale-90">
+                      <button onClick={() => handleToggleStatus(task)} className="transition-transform active:scale-90">
                         {task.status === "completed"
                           ? <CheckCircle2 className="h-5 w-5 text-green-500" />
                           : <Circle className="h-5 w-5 text-gray-200 hover:text-primary transition-colors" />}
@@ -258,7 +295,7 @@ export default function TasksPage() {
                 )) : !loading && (
                   <tr>
                     <td colSpan={8} className="px-6 py-10 text-center text-xs font-medium text-gray-500">
-                      No tasks found.
+                      {user?.role === "employee" ? "No assigned tasks found." : "No tasks found."}
                     </td>
                   </tr>
                 )}
