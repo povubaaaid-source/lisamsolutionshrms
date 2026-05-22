@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import {
   adminAssignablePermissionModules,
   getModulesFromPermissions,
@@ -11,6 +12,26 @@ import {
 } from "@/lib/auth-contract";
 
 export type EmployeeAssignableRole = "admin" | "employee";
+
+const roleOptions: Array<{
+  value: EmployeeAssignableRole;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  {
+    value: "employee",
+    label: "Employee",
+    description: "Self-service portal access",
+    icon: UserRound,
+  },
+  {
+    value: "admin",
+    label: "Admin",
+    description: "Company management access",
+    icon: ShieldCheck,
+  },
+];
 
 const normalizePermissions = (permissions: PermissionKey[]): PermissionKey[] =>
   Array.from(new Set<PermissionKey>(["dashboard.view", "profile.*", ...permissions]));
@@ -51,7 +72,9 @@ type EmployeePermissionMatrixProps = {
 };
 
 export default function EmployeePermissionMatrix({
+  role,
   permissions,
+  onRoleChange,
   onPermissionsChange,
 }: EmployeePermissionMatrixProps) {
   const normalizedPermissions = normalizePermissions(permissions);
@@ -66,8 +89,34 @@ export default function EmployeePermissionMatrix({
           </p>
         </div>
         <span className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-widest text-gray-500">
-          Default Employee Access
+          {role === "admin" ? "Admin Access" : "Employee Access"}
         </span>
+      </div>
+      <div className="grid gap-3 border-b border-gray-100 bg-white p-4 sm:grid-cols-2">
+        {roleOptions.map((option) => {
+          const Icon = option.icon;
+          const selected = role === option.value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onRoleChange(option.value)}
+              aria-pressed={selected}
+              className={`flex min-h-20 items-center gap-3 rounded-xl border p-4 text-left transition ${
+                selected ? "border-primary bg-primary/5 text-primary shadow-sm" : "border-gray-100 bg-gray-50 text-gray-500 hover:border-primary/30 hover:bg-white"
+              }`}
+            >
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${selected ? "bg-primary text-white" : "bg-white text-gray-400"}`}>
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-black uppercase tracking-widest">{option.label}</span>
+                <span className="mt-1 block text-[10px] font-bold uppercase tracking-widest text-gray-400">{option.description}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
