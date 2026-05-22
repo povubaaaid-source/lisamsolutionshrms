@@ -260,7 +260,7 @@ const roleMenuAccess: Record<UserRole, string[]> = {
 const roleSubmenuAccess: Partial<Record<UserRole, Record<string, string[]>>> = {
   employee: {
     Dashboard: ["Employee Dashboard"],
-    HR: ["Attendance", "Leaves"],
+    HR: ["Attendance", "Holidays", "Leaves"],
     Payroll: ["My Payslips"],
   },
   client: {

@@ -93,8 +93,8 @@ const buildCalendarCells = (year: number, monthIndex: number): CalendarCell[] =>
 
 export default function HolidaysPage() {
   const { showToast } = useToast();
-  const { user, hasPermission } = useAuth();
-  const canManageHolidays = user?.role === "admin" || hasPermission("hr.manage") || hasPermission("hr.edit");
+  const { user } = useAuth();
+  const canManageHolidays = user?.role === "admin";
 
   const [loading, setLoading] = useState(true);
   const [holidays, setHolidays] = useState<HolidayRecord[]>([]);

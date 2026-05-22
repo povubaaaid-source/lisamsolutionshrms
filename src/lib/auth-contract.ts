@@ -15,6 +15,7 @@ export type PermissionModuleKey =
   | "shifts"
   | "attendance"
   | "leaves"
+  | "holidays"
   | "projects"
   | "tasks"
   | "finance"
@@ -54,6 +55,7 @@ const basePermissionModules: PermissionModuleDefinition[] = [
   { key: "shifts", label: "Shift Types", group: "hr", actions: ["view", "create", "edit", "delete", "manage"] },
   { key: "attendance", label: "Attendance", group: "hr", actions: ["view", "create", "edit", "approve", "export", "manage"] },
   { key: "leaves", label: "Leaves", group: "hr", actions: ["view", "create", "edit", "approve", "delete", "manage"] },
+  { key: "holidays", label: "Holidays", group: "hr", actions: ["view", "create", "edit", "delete", "manage"] },
   { key: "projects", label: "Projects", group: "work", actions: ["view", "create", "edit", "delete", "export", "manage"] },
   { key: "tasks", label: "Tasks", group: "work", actions: ["view", "create", "edit", "delete", "export", "manage"] },
   { key: "leads", label: "Leads", group: "core", actions: ["view", "create", "edit", "delete", "export", "manage"] },
@@ -144,7 +146,7 @@ export const roleDefinitions: Record<UserRole, RoleDefinition> = {
     label: "Employee",
     panel: "employee",
     defaultRoute: "/employee/dashboard",
-    description: "Internal employee portal for attendance, leaves, payslips, assigned projects, tasks, tickets, notices, and profile.",
+    description: "Internal employee portal for attendance, leaves, holidays, payslips, assigned projects, tasks, tickets, notices, and profile.",
     scope: "Company scoped and generally self/team scoped depending on assigned permissions.",
   },
   client: {
@@ -176,6 +178,7 @@ export const rolePermissions: Record<UserRole, PermissionKey[]> = {
     "shifts.*",
     "attendance.*",
     "leaves.*",
+    "holidays.*",
     "projects.*",
     "tasks.*",
     "finance.*",
@@ -201,6 +204,7 @@ export const rolePermissions: Record<UserRole, PermissionKey[]> = {
     "leaves.view",
     "leaves.create",
     "leaves.delete",
+    "holidays.view",
     "payroll.view",
     "projects.view",
     "tasks.*",
@@ -315,7 +319,7 @@ export const roleRouteRules: RoleRouteRule[] = [
 ];
 
 export const permissionRouteRules: PermissionRouteRule[] = [
-  { prefixes: ["/dashboard/hr"], anyOf: ["dashboard.view", "hr.view", "employees.view", "attendance.view", "leaves.view"] },
+  { prefixes: ["/dashboard/hr"], anyOf: ["dashboard.view", "hr.view", "employees.view", "attendance.view", "leaves.view", "holidays.view"] },
   { prefixes: ["/dashboard/finance"], anyOf: ["dashboard.view", "finance.view"] },
   { prefixes: ["/dashboard/project"], anyOf: ["dashboard.view", "projects.view", "tasks.view"] },
   { prefixes: ["/dashboard/ticket"], anyOf: ["dashboard.view", "tickets.view"] },
@@ -332,7 +336,8 @@ export const permissionRouteRules: PermissionRouteRule[] = [
   { prefixes: ["/attendance/bulk", "/attendance/live-feed", "/attendance/roster", "/attendance/settings", "/attendance/reports"], anyOf: ["attendance.manage"] },
   { prefixes: ["/attendance"], anyOf: ["attendance.view", "attendance.manage"] },
   { prefixes: ["/leaves"], anyOf: ["leaves.view", "leaves.manage"] },
-  { prefixes: ["/holidays"], anyOf: ["hr.view", "hr.manage"] },
+  { prefixes: ["/holidays/create"], anyOf: ["holidays.create", "holidays.manage"] },
+  { prefixes: ["/holidays"], anyOf: ["holidays.view", "holidays.manage"] },
   { prefixes: ["/clients", "/client-contacts", "/client-settings"], anyOf: ["clients.view", "clients.manage"] },
   { prefixes: ["/invoices", "/estimates", "/proposals", "/credit-notes", "/payments", "/expenses", "/invoice-recurring", "/expenses-recurring"], anyOf: ["finance.view", "finance.manage"] },
   { prefixes: ["/leads", "/lead-form", "/lead-settings"], anyOf: ["leads.view", "leads.manage"] },
@@ -443,6 +448,6 @@ export const makeDevUserFromEmail = (email: string): AuthUser => {
     role,
     company_id: role === "super_admin" ? null : 1,
     permissions: rolePermissions[role],
-    modules: role === "super_admin" ? ["platform"] : ["hr", "work", "finance", "tickets", "messages"],
+    modules: role === "super_admin" ? ["platform"] : getModulesFromPermissions(rolePermissions[role]),
   };
 };

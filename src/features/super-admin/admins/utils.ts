@@ -15,6 +15,7 @@ const permissionTemplates: Array<{ id: string; label: string; permissions: Permi
       "shifts.*",
       "attendance.*",
       "leaves.*",
+      "holidays.*",
       "recruitment.*",
       "reports.view",
       "reports.export",
